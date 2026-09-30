@@ -308,37 +308,95 @@ function series(r) {
   t.forEach((x, i) => { if (c[i] != null) { out.t.push(x); out.c.push(round(c[i])); } });
   return out;
 }
+// CNBC-Kurse (Sammelabfrage, kein Schlüssel nötig) – aktuelle Kurse für alle Werte in wenigen Anfragen
+const CNBC_MAP = {
+  '^GDAXI': '.GDAXI', '^MDAXI': '.MDAXI', '^TECDAX': '.TECDAX', '^STOXX50E': '.STOXX50E', '^GSPC': '.SPX', '^IXIC': '.IXIC',
+  '^DJI': '.DJI', '^N225': '.N225', '^FTSE': '.FTSE', '^SSMI': '.SSMI', '^HSI': '.HSI',
+  'EURUSD=X': 'EUR=', 'EURGBP=X': 'EURGBP=', 'EURCHF=X': 'EURCHF=', 'GC=F': '@GC.1', 'SI=F': '@SI.1', 'BZ=F': '@LCO.1', 'CL=F': '@CL.1',
+  'BRK-B': 'BRK.B',
+};
+const SUFFIX = { DE: 'DE', AS: 'NL', PA: 'FR', SW: 'CH', L: 'GB', CO: 'DK', HE: 'FI' };
+function cnbcSym(sym) {
+  if (CNBC_MAP[sym]) return CNBC_MAP[sym];
+  if (/-EUR$/.test(sym)) return null; // Krypto kommt von Yahoo/CoinGecko
+  const m = /^(.+)\.([A-Z]+)$/.exec(sym);
+  if (m) return SUFFIX[m[2]] ? `${m[1]}-${m[2] === 'DE' ? 'DE' : SUFFIX[m[2]]}` : null;
+  return sym;
+}
+const numv = v => { if (v == null || v === '' || v === 'UNCH') return v === 'UNCH' ? 0 : null; const n = parseFloat(String(v).replace(/[,%+]/g, '')); return isNaN(n) ? null : n; };
+async function cnbcQuotes(symbols) {
+  const pairs = symbols.map(s => [s, cnbcSym(s)]).filter(p => p[1]);
+  const out = {};
+  for (let i = 0; i < pairs.length; i += 40) {
+    const chunk = pairs.slice(i, i + 40);
+    const url = `https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=${encodeURIComponent(chunk.map(p => p[1]).join('|'))}&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json&events=1`;
+    try {
+      const d = await curlJson(url);
+      let list = d?.FormattedQuoteResult?.FormattedQuote || [];
+      if (!Array.isArray(list)) list = [list];
+      if (i === 0) console.log('CNBC Beispiel:', JSON.stringify(list[0] || d).slice(0, 400));
+      for (const q of list) {
+        const pair = chunk.find(p => p[1].toUpperCase() === String(q.symbol || '').toUpperCase());
+        if (!pair) continue;
+        const price = numv(q.last), prev = numv(q.previous_day_closing) ?? (price != null && numv(q.change) != null ? price - numv(q.change) : null);
+        if (price == null) continue;
+        out[pair[0]] = {
+          name: q.shortName || q.name, longName: q.name || q.shortName, currency: q.currencyCode || '', exchange: q.exchange || '',
+          price, prev, dayHigh: numv(q.high), dayLow: numv(q.low), volume: numv(q.volume), high52: numv(q.yrhiprice), low52: numv(q.yrloprice),
+          time: Date.parse(q.last_time) || NOW,
+        };
+      }
+    } catch (e) { console.log('CNBC:', e.message); }
+    await sleep(300);
+  }
+  return out;
+}
+
 async function buildMarkets() {
   const quotes = {};
-  let blocked = false;
-  await pool(MARKET_UNIVERSE, 1, async sym => {
-    if (blocked) { const o = await readOld(`markets/s/${symFile(sym)}.json`); if (o?.meta) quotes[sym] = { ...o.meta, spark: (o.d1?.c || []).filter((_, i) => i % 3 === 0), stale: true }; return; }
+  const cnbc = await cnbcQuotes(MARKET_UNIVERSE);
+  console.log(`CNBC-Kurse: ${Object.keys(cnbc).length}/${MARKET_UNIVERSE.length}`);
+  // Charts von Yahoo: sparsam, nacheinander, mit Budget pro Lauf
+  let budget = 90, blocked = false;
+  const yahoo = async (sym, range, interval) => {
+    if (blocked || budget <= 0) throw new Error('übersprungen');
+    budget--;
+    try { return await yChart(sym, range, interval); }
+    catch (e) { if (/429/.test(e.message)) { stats.yahoo429 = (stats.yahoo429 || 0) + 1; if (stats.yahoo429 >= 5) blocked = true; } throw e; }
+  };
+  const order = [...MARKET_UNIVERSE];
+  await pool(order, 1, async sym => {
     const file = `markets/s/${symFile(sym)}.json`;
     const old = await readOld(file);
+    const rec = { ...(old || {}), sym };
+    let meta = cnbc[sym] ? { ...(old?.meta || {}), ...cnbc[sym], type: old?.meta?.type || '' } : null;
     try {
-      const d1 = await yChart(sym, '1d', '5m');
-      const m = d1.meta || {};
-      const rec = { ...(old || {}), sym, t: NOW, d1: series(d1) };
-      rec.meta = {
-        name: m.shortName || m.longName || sym, longName: m.longName || m.shortName || sym, currency: m.currency || '',
-        exchange: m.fullExchangeName || m.exchangeName || '', type: m.instrumentType || '',
-        price: m.regularMarketPrice, prev: m.previousClose ?? m.chartPreviousClose, dayHigh: m.regularMarketDayHigh,
-        dayLow: m.regularMarketDayLow, volume: m.regularMarketVolume, high52: m.fiftyTwoWeekHigh, low52: m.fiftyTwoWeekLow,
-        time: (m.regularMarketTime || 0) * 1000,
-      };
-      if (!old?.d5t || NOW - old.d5t > 30 * 60e3) { rec.d5 = series(await yChart(sym, '5d', '30m')); rec.d5t = NOW; }
-      if (!old?.y1t || NOW - old.y1t > 3 * 3600e3) { rec.y1 = series(await yChart(sym, '1y', '1d')); rec.y1t = NOW; }
-      if (!old?.y5t || NOW - old.y5t > 24 * 3600e3) { rec.y5 = series(await yChart(sym, '5y', '1wk')); rec.y5t = NOW; }
-      await write(file, rec);
-      const spark = rec.d1.c.filter((_, i) => i % 3 === 0);
-      quotes[sym] = { ...rec.meta, spark };
-      stats.quotes++;
+      if (!old?.d1t || NOW - old.d1t > 20 * 60e3 || !meta) {
+        const d1 = await yahoo(sym, '1d', '5m');
+        const m = d1.meta || {};
+        rec.d1 = series(d1); rec.d1t = NOW;
+        const ymeta = {
+          name: m.shortName || m.longName || sym, longName: m.longName || m.shortName || sym, currency: m.currency || '',
+          exchange: m.fullExchangeName || m.exchangeName || '', type: m.instrumentType || '',
+          price: m.regularMarketPrice, prev: m.previousClose ?? m.chartPreviousClose, dayHigh: m.regularMarketDayHigh,
+          dayLow: m.regularMarketDayLow, volume: m.regularMarketVolume, high52: m.fiftyTwoWeekHigh, low52: m.fiftyTwoWeekLow,
+          time: (m.regularMarketTime || 0) * 1000,
+        };
+        // Yahoo-Namen (z. B. „SAP SE“) bevorzugen, CNBC-Kurs ist meist aktueller
+        meta = meta ? { ...ymeta, ...meta, name: ymeta.name, longName: ymeta.longName, type: ymeta.type } : ymeta;
+      }
+      if (!old?.d5t || NOW - old.d5t > 60 * 60e3) { rec.d5 = series(await yahoo(sym, '5d', '30m')); rec.d5t = NOW; }
+      if (!old?.y1t || NOW - old.y1t > 6 * 3600e3) { rec.y1 = series(await yahoo(sym, '1y', '1d')); rec.y1t = NOW; }
+      if (!old?.y5t || NOW - old.y5t > 24 * 3600e3) { rec.y5 = series(await yahoo(sym, '5y', '1wk')); rec.y5t = NOW; }
     } catch (e) {
-      stats.quoteErr++;
-      if (stats.quotes === 0 && stats.quoteErr >= 8) blocked = true;
-      if (stats.quoteErr <= 3) console.log(`Kurs ${sym}: ${e.message}`);
-      if (old?.meta) quotes[sym] = { ...old.meta, spark: (old.d1?.c || []).filter((_, i) => i % 3 === 0), stale: true };
+      if (!/übersprungen/.test(e.message)) { stats.quoteErr++; if (stats.quoteErr <= 3) console.log(`Chart ${sym}: ${e.message}`); }
     }
+    meta ||= old?.meta;
+    if (!meta) return;
+    rec.meta = meta; rec.t = NOW;
+    await write(file, rec);
+    quotes[sym] = { ...meta, spark: (rec.d1?.c || []).filter((_, i) => i % 3 === 0) };
+    stats.quotes++;
   });
   await write('markets/quotes.json', { updated: NOW, quotes });
   try {
