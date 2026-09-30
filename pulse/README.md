@@ -30,15 +30,18 @@ Es ist reines HTML/CSS/JavaScript ohne Build-Schritt.
   Die App ist dann unter `https://<user>.github.io/<repo>/pulse/` erreichbar.
 - **Auf dem iPhone installieren:** Seite in Safari öffnen → Teilen → „Zum Home-Bildschirm“.
 
-## Datenquellen & Proxy
+## Datenquellen
 
-Viele Nachrichtenseiten erlauben keinen direkten Abruf aus dem Browser (CORS). Pulse ruft
-CORS-freundliche APIs (tagesschau, ESPN, Open-Meteo, Wikipedia, Guardian, CoinGecko, OpenLigaDB)
-direkt ab und nutzt für RSS-Feeds, Yahoo Finance und den Reader-Modus automatisch öffentliche
-CORS-Proxys (corsproxy.io, allorigins, codetabs). Diese kostenlosen Dienste sind nicht immer
-zuverlässig – für stabilen Betrieb einen eigenen Proxy einrichten:
-
-1. `worker/cors-proxy.js` als Cloudflare Worker deployen (kostenloser Tarif).
-2. In Pulse: **Mehr → Einstellungen → Eigener CORS-Proxy** → `https://<worker>.workers.dev/?url=`
+- **Daten-Job (GitHub Actions, alle 10 Minuten):** `.github/workflows/pulse-data.yml` führt
+  `scripts/build-data.mjs` aus. Er sammelt alle RSS-Feeds (16 Redaktionen + Google News), lädt die
+  Volltexte der neuesten Artikel, holt Kurse und Charts für über 110 Wertpapiere (Yahoo Finance) und
+  Sicherungskopien der Sportdaten. Das Ergebnis liegt als JSON im Branch `data` und wird von der App
+  über `raw.githubusercontent.com` geladen – ganz ohne CORS-Proxy.
+- **Direkt im Browser:** tagesschau (Suche & Top-Meldungen), ESPN über `site.web.api.espn.com`
+  (Live-Ergebnisse alle 30 Sekunden, Tabellen, Kader, Spieler), OpenLigaDB (Torjäger), Open-Meteo
+  (Wetter), Wikipedia (Recherche), CoinGecko (Krypto).
+- **Optional eigener Proxy:** `worker/cors-proxy.js` als Cloudflare Worker deployen und in
+  **Mehr → Einstellungen → Eigener CORS-Proxy** eintragen (`https://<worker>.workers.dev/?url=`).
+  Dann laden RSS-Feeds sekundenaktuell, beliebige Wertpapiere sind suchbar und die Google-News-Suche ist aktiv.
 
 Kursdaten können verzögert sein. Analysen sind automatisch berechnete Indikatoren – keine Anlageberatung.
