@@ -357,14 +357,16 @@ async function buildMarkets() {
   const cnbc = await cnbcQuotes(MARKET_UNIVERSE);
   console.log(`CNBC-Kurse: ${Object.keys(cnbc).length}/${MARKET_UNIVERSE.length}`);
   // Charts von Yahoo: sparsam, nacheinander, mit Budget pro Lauf
-  let budget = 90, blocked = false;
+  let budget = 160, blocked = false;
   const yahoo = async (sym, range, interval) => {
     if (blocked || budget <= 0) throw new Error('übersprungen');
     budget--;
     try { return await yChart(sym, range, interval); }
     catch (e) { if (/429/.test(e.message)) { stats.yahoo429 = (stats.yahoo429 || 0) + 1; if (stats.yahoo429 >= 5) blocked = true; } throw e; }
   };
-  const order = [...MARKET_UNIVERSE];
+  // Werte ohne Chart-Historie zuerst, damit sich die Lücken schnell füllen
+  const ages = Object.fromEntries(await Promise.all(MARKET_UNIVERSE.map(async s => [s, (await readOld(`markets/s/${symFile(s)}.json`))?.y1t || 0])));
+  const order = [...MARKET_UNIVERSE].sort((a, b) => ages[a] - ages[b]);
   await pool(order, 1, async sym => {
     const file = `markets/s/${symFile(sym)}.json`;
     const old = await readOld(file);
