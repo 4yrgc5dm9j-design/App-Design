@@ -274,10 +274,10 @@ async function buildNews() {
 // ---------- Börse ----------
 const YH = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
 // Yahoo blockt Node-fetch (429), antwortet aber curl mit Mobil-Kennung
-const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1';
 function curlJson(url) {
   return new Promise((res, rej) => {
-    execFile('curl', ['-s', '--max-time', '15', '-A', MOBILE_UA, '-H', 'Accept: application/json', '-w', '\n%{http_code}', url], { maxBuffer: 20e6 }, (err, out) => {
+    execFile('curl', ['-s', '--max-time', '15', '-A', MOBILE_UA, '-H', 'Origin: https://finance.yahoo.com', '-w', '\n%{http_code}', url], { maxBuffer: 20e6 }, (err, out) => {
       if (err) return rej(err);
       const i = out.lastIndexOf('\n');
       const code = out.slice(i + 1).trim();
@@ -286,15 +286,18 @@ function curlJson(url) {
     });
   });
 }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function yChart(sym, range, interval) {
   let err;
-  for (const h of YH) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const h = YH[attempt % 2];
     try {
-      const d = await curlJson(`${h}/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}&includePrePost=false`);
+      const d = await curlJson(`${h}/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}`);
       const r = d?.chart?.result?.[0];
       if (!r) throw new Error('leer');
+      await sleep(250);
       return r;
-    } catch (e) { err = e; await new Promise(r => setTimeout(r, 400)); }
+    } catch (e) { err = e; await sleep(/429/.test(e.message) ? 3000 * (attempt + 1) : 500); }
   }
   throw err;
 }
@@ -307,7 +310,9 @@ function series(r) {
 }
 async function buildMarkets() {
   const quotes = {};
-  await pool(MARKET_UNIVERSE, 3, async sym => {
+  let blocked = false;
+  await pool(MARKET_UNIVERSE, 1, async sym => {
+    if (blocked) { const o = await readOld(`markets/s/${symFile(sym)}.json`); if (o?.meta) quotes[sym] = { ...o.meta, spark: (o.d1?.c || []).filter((_, i) => i % 3 === 0), stale: true }; return; }
     const file = `markets/s/${symFile(sym)}.json`;
     const old = await readOld(file);
     try {
@@ -330,6 +335,7 @@ async function buildMarkets() {
       stats.quotes++;
     } catch (e) {
       stats.quoteErr++;
+      if (stats.quotes === 0 && stats.quoteErr >= 8) blocked = true;
       if (stats.quoteErr <= 3) console.log(`Kurs ${sym}: ${e.message}`);
       if (old?.meta) quotes[sym] = { ...old.meta, spark: (old.d1?.c || []).filter((_, i) => i % 3 === 0), stale: true };
     }
@@ -358,7 +364,8 @@ async function buildSports() {
 
 await fs.mkdir(OUT, { recursive: true });
 const t0 = Date.now();
-await Promise.all([buildNews(), buildMarkets(), buildSports()]);
+await Promise.all([buildNews(), buildSports()]);
+await buildMarkets();
 await write('status.json', { updated: NOW, seconds: Math.round((Date.now() - t0) / 1000), ...stats, feedErr: stats.feedErr.slice(0, 60) });
 console.log(JSON.stringify({ ...stats, feedErr: stats.feedErr.length }, null, 1));
 if (stats.feedErr.length) console.log('Feed-Fehler:\n' + stats.feedErr.join('\n'));
