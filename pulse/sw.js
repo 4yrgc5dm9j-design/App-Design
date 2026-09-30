@@ -1,8 +1,8 @@
 // Service Worker: App-Shell offline verfügbar machen
-const VERSION = 'pulse-v1';
+const VERSION = 'pulse-v2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/store.js', 'js/net.js', 'js/ui.js', 'js/news.js', 'js/markets.js',
+  'js/app.js', 'js/sources.js', 'js/store.js', 'js/net.js', 'js/ui.js', 'js/news.js', 'js/markets.js',
   'js/sports.js', 'js/extras.js', 'js/dashboard.js', 'js/settings.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];

@@ -3,6 +3,7 @@
 // Aufruf: node scripts/build-data.mjs <ausgabe-ordner>
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { CATS, SOURCES, LEAGUES, MARKET_UNIVERSE, symFile } from '../pulse/js/sources.js';
 
 const OUT = path.resolve(process.argv[2] || 'out');
@@ -272,15 +273,28 @@ async function buildNews() {
 
 // ---------- Börse ----------
 const YH = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
+// Yahoo blockt Node-fetch (429), antwortet aber curl mit Mobil-Kennung
+const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+function curlJson(url) {
+  return new Promise((res, rej) => {
+    execFile('curl', ['-s', '--max-time', '15', '-A', MOBILE_UA, '-H', 'Accept: application/json', '-w', '\n%{http_code}', url], { maxBuffer: 20e6 }, (err, out) => {
+      if (err) return rej(err);
+      const i = out.lastIndexOf('\n');
+      const code = out.slice(i + 1).trim();
+      if (code !== '200') return rej(new Error('HTTP ' + code));
+      try { res(JSON.parse(out.slice(0, i))); } catch (e) { rej(e); }
+    });
+  });
+}
 async function yChart(sym, range, interval) {
   let err;
   for (const h of YH) {
     try {
-      const d = await get(`${h}/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}&includePrePost=false`, { json: true });
+      const d = await curlJson(`${h}/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}&includePrePost=false`);
       const r = d?.chart?.result?.[0];
       if (!r) throw new Error('leer');
       return r;
-    } catch (e) { err = e; }
+    } catch (e) { err = e; await new Promise(r => setTimeout(r, 400)); }
   }
   throw err;
 }
@@ -293,7 +307,7 @@ function series(r) {
 }
 async function buildMarkets() {
   const quotes = {};
-  await pool(MARKET_UNIVERSE, 5, async sym => {
+  await pool(MARKET_UNIVERSE, 3, async sym => {
     const file = `markets/s/${symFile(sym)}.json`;
     const old = await readOld(file);
     try {

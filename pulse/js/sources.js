@@ -23,8 +23,7 @@ export const SOURCES = [
     welt: 'https://www.spiegel.de/ausland/index.rss', kultur: 'https://www.spiegel.de/kultur/index.rss' } },
   { id: 'zeit', name: 'ZEIT ONLINE', color: '#2d2d2d', desc: 'Wochenzeitung', feeds: {
     top: 'https://newsfeed.zeit.de/index', politik: 'https://newsfeed.zeit.de/politik/index', wirtschaft: 'https://newsfeed.zeit.de/wirtschaft/index',
-    sport: 'https://newsfeed.zeit.de/sport/index', tech: 'https://newsfeed.zeit.de/digital/index', wissen: 'https://newsfeed.zeit.de/wissen/index',
-    kultur: 'https://newsfeed.zeit.de/kultur/index' } },
+    sport: 'https://newsfeed.zeit.de/sport/index', tech: 'https://newsfeed.zeit.de/digital/index' } },
   { id: 'faz', name: 'F.A.Z.', color: '#4a4a4a', desc: 'Frankfurter Allgemeine', feeds: {
     top: 'https://www.faz.net/rss/aktuell/', politik: 'https://www.faz.net/rss/aktuell/politik/', wirtschaft: 'https://www.faz.net/rss/aktuell/wirtschaft/',
     boerse: 'https://www.faz.net/rss/aktuell/finanzen/', sport: 'https://www.faz.net/rss/aktuell/sport/', tech: 'https://www.faz.net/rss/aktuell/technik-motor/',
@@ -41,8 +40,7 @@ export const SOURCES = [
     boerse: 'https://www.welt.de/feeds/section/finanzen.rss', sport: 'https://www.welt.de/feeds/section/sport.rss', kultur: 'https://www.welt.de/feeds/section/kultur.rss' } },
   { id: 'handelsblatt', name: 'Handelsblatt', color: '#ee7f00', desc: 'Wirtschaft & Finanzen', feeds: {
     top: 'https://www.handelsblatt.com/contentexport/feed/top-themen', politik: 'https://www.handelsblatt.com/contentexport/feed/politik',
-    wirtschaft: 'https://www.handelsblatt.com/contentexport/feed/wirtschaft', boerse: 'https://www.handelsblatt.com/contentexport/feed/finanzen',
-    tech: 'https://www.handelsblatt.com/contentexport/feed/technik' } },
+    wirtschaft: 'https://www.handelsblatt.com/contentexport/feed/wirtschaft', boerse: 'https://www.handelsblatt.com/contentexport/feed/finanzen' } },
   { id: 'dlf', name: 'Deutschlandfunk', color: '#004f9f', desc: 'Radio-Nachrichten', feeds: {
     top: 'https://www.deutschlandfunk.de/nachrichten-100.rss', politik: 'https://www.deutschlandfunk.de/politikportal-100.rss',
     kultur: 'https://www.deutschlandfunk.de/kulturportal-100.rss', wissen: 'https://www.deutschlandfunk.de/wissen-106.rss' } },
