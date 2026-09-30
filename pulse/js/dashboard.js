@@ -138,7 +138,7 @@ export function renderDashboard(root, app) {
     try {
       const games = await dashboardGames();
       el.innerHTML = head + `<div class="muted" style="font-size:12px;padding:0 16px">${esc(names)}</div>` +
-        (games.length ? games.slice(0, 6).map(matchRow).join('') : empty('Heute keine Spiele in deinen Ligen.', '📅'));
+        (games.length ? (games[0].upcoming ? '<div class="day-h">Als Nächstes</div>' : '') + games.slice(0, 6).map(matchRow).join('') : empty('Aktuell keine Spiele in deinen Ligen.', '📅'));
     } catch (e) { el.innerHTML = head + errorBox(e); }
   }
   function wLive() {

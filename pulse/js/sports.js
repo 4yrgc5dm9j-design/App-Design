@@ -119,7 +119,7 @@ function statusLabel(m) {
     const d = m.detail.replace(/^FT$/, 'Ende').replace('AET', 'n. V.').replace(/FT-Pens|Pens/, 'i. E.').replace('Final', 'Ende').replace(/^Postponed$/, 'Verlegt');
     return `<small>${esc(d || 'Ende')}</small>`;
   }
-  return `<small>${esc(clock(m.date))}</small>`;
+  return `<small>${esc(m.upcoming || Math.abs(m.date - Date.now()) > 20 * 3600e3 ? dayLabel(m.date).replace(/^(\w+), /, '') + ' · ' + clock(m.date) : clock(m.date))}</small>`;
 }
 export function matchRow(m) {
   if (!m.home) {
@@ -173,7 +173,13 @@ export function renderSports(root) {
   async function paintGames() {
     body.innerHTML = `<div class="card">${skeletonList(6, false)}</div>`;
     try {
-      const list = await scoreboard(key, week);
+      let list = await scoreboard(key, week);
+      let nextNote = '';
+      if (!list.length && week === 0) {
+        // Pause (z. B. Länderspiele): nächsten Spieltag automatisch anzeigen
+        const next = await scoreboard(key).catch(() => []);
+        if (next.length) { list = next; nextNote = `<div class="muted" style="font-size:13px;margin:0 4px 10px">Diese Woche keine Spiele – hier ist der nächste Spieltag:</div>`; }
+      }
       if (mode !== 'games') return;
       const groups = groupByDay(list);
       const s = new Date(); s.setDate(s.getDate() - 3 + week * 7);
@@ -184,7 +190,7 @@ export function renderSports(root) {
           <button class="icon-btn" data-week="-1" aria-label="Vorherige Woche">${icon('left')}</button>
           <button class="btn sm" data-week="0">${week === 0 ? 'Diese Woche' : `${f(s)} – ${f(e)}`}</button>
           <button class="icon-btn" data-week="1" aria-label="Nächste Woche">${icon('right')}</button></div>
-        ${groups.length ? groups.map(g => `<div class="card" style="margin-bottom:12px"><div class="day-h">${esc(g.lbl)}</div>${g.items.map(matchRow).join('')}</div>`).join('')
+        ${nextNote}${groups.length ? groups.map(g => `<div class="card" style="margin-bottom:12px"><div class="day-h">${esc(g.lbl)}</div>${g.items.map(matchRow).join('')}</div>`).join('')
           : `<div class="card">${empty('In diesem Zeitraum finden keine Spiele statt.', '📅')}</div>`}`;
       clearInterval(liveTimer);
       if (list.some(m => m.state === 'in')) liveTimer = setInterval(() => { if (!document.hidden && root.classList.contains('active') && mode === 'games') { invalidate('sb:'); paintGames(); } }, 30e3);
@@ -406,5 +412,7 @@ export async function dashboardGames() {
     .filter(m => m.state === 'in' || Math.abs(m.date - now) < 36 * 3600e3 || (m.state === 'post' && now - m.date < 60 * 3600e3))
     .filter(m => keys.includes(m.key) || favTeam(m.key, m.home?.id) || favTeam(m.key, m.away?.id));
   const rank = m => (m.state === 'in' ? 0 : (favTeam(m.key, m.home?.id) || favTeam(m.key, m.away?.id)) ? 1 : m.state === 'pre' ? 2 : 3);
-  return all.sort((a, b) => rank(a) - rank(b) || Math.abs(a.date - now) - Math.abs(b.date - now));
+  if (all.length) return all.sort((a, b) => rank(a) - rank(b) || Math.abs(a.date - now) - Math.abs(b.date - now));
+  // Nichts in den nächsten Stunden: die nächsten angesetzten Spiele zeigen
+  return lists.flat().filter(m => m && m.state === 'pre' && m.date > now).sort((a, b) => a.date - b.date).slice(0, 6).map(m => ({ ...m, upcoming: true }));
 }
