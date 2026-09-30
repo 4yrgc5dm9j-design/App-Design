@@ -4,21 +4,8 @@ import { fetchJSON, pool } from './net.js';
 import { esc, safeUrl, icon, openSheet, toast, skeletonList, empty, errorBox, dayLabel, clock, $$ } from './ui.js';
 import { artRow, searchNews } from './news.js';
 
-export const LEAGUES = [
-  { key: 'soccer/ger.1', name: 'Bundesliga', flag: '🇩🇪', oldb: 'bl1' },
-  { key: 'soccer/ger.2', name: '2. Bundesliga', flag: '🇩🇪', oldb: 'bl2' },
-  { key: 'soccer/ger.dfb_pokal', name: 'DFB-Pokal', flag: '🏆', noTable: true },
-  { key: 'soccer/uefa.champions', name: 'Champions League', flag: '⭐' },
-  { key: 'soccer/uefa.europa', name: 'Europa League', flag: '🟠' },
-  { key: 'soccer/eng.1', name: 'Premier League', flag: '🏴' },
-  { key: 'soccer/esp.1', name: 'LaLiga', flag: '🇪🇸' },
-  { key: 'soccer/ita.1', name: 'Serie A', flag: '🇮🇹' },
-  { key: 'soccer/fra.1', name: 'Ligue 1', flag: '🇫🇷' },
-  { key: 'basketball/nba', name: 'NBA', flag: '🏀' },
-  { key: 'football/nfl', name: 'NFL', flag: '🏈' },
-  { key: 'hockey/nhl', name: 'NHL', flag: '🏒' },
-  { key: 'racing/f1', name: 'Formel 1', flag: '🏎️', racing: true, noTeams: true },
-];
+import { LEAGUES } from './sources.js';
+export { LEAGUES };
 export const leagueBy = k => LEAGUES.find(l => l.key === k);
 const API = 'https://site.api.espn.com/apis/site/v2/sports/';
 const isSoccer = k => k.startsWith('soccer/');

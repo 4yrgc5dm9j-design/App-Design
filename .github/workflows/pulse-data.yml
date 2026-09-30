@@ -1,0 +1,66 @@
+name: Pulse-Daten aktualisieren
+
+on:
+  push:
+    branches: [claude/pulse-news-app]
+    paths: ['scripts/**', 'pulse/js/sources.js', '.github/workflows/pulse-data.yml']
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pulse-data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Vorherige Daten laden
+        run: |
+          git clone --depth 1 --branch data "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" out || mkdir -p out
+          rm -rf out/.git
+
+      - name: Daten sammeln
+        run: node scripts/build-data.mjs out
+
+      - name: CORS-Check der Direkt-APIs
+        continue-on-error: true
+        run: |
+          for u in \
+            "https://www.tagesschau.de/api2u/homepage/" \
+            "https://www.tagesschau.de/api2u/search/?searchText=Bundestag&pageSize=5" \
+            "https://site.web.api.espn.com/apis/site/v2/sports/soccer/ger.1/scoreboard" \
+            "https://site.web.api.espn.com/apis/v2/sports/soccer/ger.1/standings" \
+            "https://site.web.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams" \
+            "https://site.web.api.espn.com/apis/common/v3/sports/soccer/ger.1/athletes/148455" \
+            "https://api.openligadb.de/getgoalgetters/bl1/2026" \
+            "https://content.guardianapis.com/search?api-key=test&page-size=1" \
+            "https://api.coingecko.com/api/v3/ping" \
+            "https://api.open-meteo.com/v1/forecast?latitude=52.5&longitude=13.4&current=temperature_2m" \
+            "https://raw.githubusercontent.com/${{ github.repository }}/data/status.json" ; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Origin: https://raw.githack.com' -A 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1' "$u")
+            acao=$(curl -s -D - -o /dev/null -H 'Origin: https://raw.githack.com' -A 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1' "$u" | grep -i '^access-control-allow-origin' | tr -d '\r')
+            echo "CORS $code [$acao] $u"
+          done
+
+      - name: Daten veröffentlichen (Branch "data")
+        run: |
+          cd out
+          git init -q -b data
+          git config user.name "pulse-bot"
+          git config user.email "pulse-bot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Pulse-Daten $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" data
+          du -sh .
