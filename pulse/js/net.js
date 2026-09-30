@@ -1,21 +1,20 @@
-// Netzwerk-Schicht: direkte Abfrage für CORS-freundliche APIs,
-// sonst automatisch über öffentliche CORS-Proxys (oder den eigenen Proxy aus den Einstellungen).
+// Netzwerk-Schicht: direkte Abfrage für CORS-freundliche APIs und die vom Daten-Job
+// erzeugten JSON-Dateien; alles andere nur über den (optionalen) eigenen Proxy.
 import { state } from './store.js';
 
 const CORS_OK = [
   'tagesschau.de', 'openligadb.de', 'espn.com', 'open-meteo.com', 'wikipedia.org',
-  'guardianapis.com', 'coingecko.com', 'rss2json.com',
+  'guardianapis.com', 'coingecko.com', 'raw.githubusercontent.com',
 ];
+
+// Vom GitHub-Actions-Job alle 10 Minuten erzeugte Daten (Branch „data“)
+export const DATA = 'https://raw.githubusercontent.com/4yrgc5dm9j-design/App-Design/data/';
+export const hasProxy = () => !!(state.settings.proxy || '').trim();
 
 function proxyList() {
   const list = [];
   const own = (state.settings.proxy || '').trim();
   if (own) list.push({ id: 'own', wrap: u => own.includes('{url}') ? own.replace('{url}', encodeURIComponent(u)) : own + encodeURIComponent(u) });
-  list.push(
-    { id: 'corsproxy', wrap: u => 'https://corsproxy.io/?url=' + encodeURIComponent(u) },
-    { id: 'allorigins', wrap: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
-    { id: 'codetabs', wrap: u => 'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(u) },
-  );
   return list;
 }
 
@@ -44,7 +43,7 @@ export async function fetchText(url, { timeout = 12000, validate } = {}) {
   }
   const list = proxyList();
   if (preferred) list.sort((a, b) => (b.id === preferred) - (a.id === preferred));
-  let lastErr = new Error('Keine Verbindung');
+  let lastErr = new Error(list.length ? 'Keine Verbindung' : 'Quelle nur mit eigenem Proxy abrufbar');
   for (const p of list) {
     try {
       const txt = await timed(p.wrap(url), timeout);

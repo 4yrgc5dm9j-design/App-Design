@@ -208,7 +208,7 @@ export function openSettings(onDone) {
         <div class="card card-pad">
           <label class="field" style="margin:0"><span>Eigener CORS-Proxy (optional)</span>
           <input class="input" data-proxy value="${esc(s.proxy)}" placeholder="https://mein-proxy.workers.dev/?url=" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-          <p class="disclaimer">Viele Nachrichtenseiten erlauben keinen direkten Abruf aus dem Browser. Pulse nutzt dafür automatisch kostenlose öffentliche Proxys. Für maximale Zuverlässigkeit kannst du einen eigenen, kostenlosen Proxy (Cloudflare Worker, siehe README) eintragen.</p>
+          <p class="disclaimer">Nicht nötig: News, Volltexte und Kurse sammelt Pulse automatisch alle 10 Minuten ein. Mit einem eigenen, kostenlosen Proxy (Cloudflare Worker, siehe README) werden zusätzlich RSS-Feeds sekundengenau live geladen, beliebige Wertpapiere durchsuchbar und Google-News-Suche aktiv.</p>
         </div>
         <div class="section-title"><h2>Daten</h2></div>
         <div class="card">
@@ -334,7 +334,7 @@ function openAbout() {
         <h2>Deine All-in-One-News-App</h2>
         <p>Pulse bündelt Nachrichten, Börse, Sport, Live-TV und Wissen an einem Ort – kostenlos, ohne Konto und ohne Werbung.</p>
         <h3>Datenquellen</h3>
-        <ul><li><b>Nachrichten:</b> tagesschau (API), SPIEGEL, ZEIT, F.A.Z., SZ, n-tv, WELT, Handelsblatt, Deutschlandfunk, DW, heise, t3n, kicker, BBC, The Guardian, NYT, Al Jazeera sowie Google News (Meldungen hunderter Verlage und Agenturen) – über öffentliche RSS-Feeds.</li>
+        <ul><li><b>Nachrichten:</b> tagesschau (API), SPIEGEL, ZEIT, F.A.Z., SZ, n-tv, WELT, Handelsblatt, Deutschlandfunk, DW, heise, t3n, kicker, BBC, NYT, Al Jazeera sowie Google News (Meldungen hunderter Verlage und Agenturen) – über öffentliche RSS-Feeds.</li>
         <li><b>Börse:</b> Yahoo Finance (Kurse, teils verzögert), CoinGecko (Krypto).</li>
         <li><b>Sport:</b> ESPN (Ergebnisse, Tabellen, Kader, Spielerdaten), OpenLigaDB (Torjäger).</li>
         <li><b>Wetter:</b> Open-Meteo · <b>Wissen:</b> Wikipedia (CC BY-SA).</li></ul>
@@ -362,7 +362,7 @@ export function runOnboarding(done) {
       <h1>Willkommen bei <span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Pulse</span></h1>
       <p class="lead">Alle Nachrichten, Börsenkurse, Live-Sport und Wissen – in einer App, kostenlos.</p>
       <div class="feature-list">
-        <div><span class="fi">📰</span>Über 17 Redaktionen & hunderte Verlage</div>
+        <div><span class="fi">📰</span>Über 16 Redaktionen & hunderte Verlage</div>
         <div><span class="fi">⭐</span>Dein Dashboard mit eigenen Themen</div>
         <div><span class="fi">🚨</span>Eilmeldungen immer ganz vorne</div>
         <div><span class="fi">📈</span>Watchlist, Charts & Kursanalysen</div>

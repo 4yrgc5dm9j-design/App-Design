@@ -1,6 +1,6 @@
 // Wetter (Open-Meteo), Wissen (Wikipedia), Recherche, Live-TV
 import { state, cached } from './store.js';
-import { fetchJSON } from './net.js';
+import { fetchJSON, DATA } from './net.js';
 import { esc, safeUrl, icon, openSheet, skeletonList, empty, errorBox, toast } from './ui.js';
 import { searchNews, artRow, sanitize } from './news.js';
 import { searchSymbols } from './markets.js';
@@ -174,7 +174,14 @@ export function openLive() {
         <div class="grid g3">${CHANNELS.map(channelCard).join('')}</div>
         <div class="section-title"><h2>Video-News</h2></div><div class="card list-card" data-vid>${skeletonList(4)}</div>`;
       try {
-        const d = await cached('ts:video', 10 * 60e3, () => fetchJSON('https://www.tagesschau.de/api2u/news/?ressort=video'));
+        const d = await cached('ts:video', 10 * 60e3, async () => {
+          try { const f = await fetchJSON(`${DATA}news/video.json`); return { news: null, items: f.items }; }
+          catch { return fetchJSON('https://www.tagesschau.de/api2u/news/?ressort=video'); }
+        });
+        if (d.items) {
+          body.querySelector('[data-vid]').innerHTML = d.items.slice(0, 12).map(i => artRow(i)).join('') || empty('Keine Videos.', '🎬');
+          return;
+        }
         const items = (d.news || []).filter(n => n.streams).slice(0, 12).map(n => ({
           id: 'v' + (n.sophoraId || n.externalId || n.title), title: n.title, teaser: n.firstSentence || '', url: safeUrl(n.shareURL || ''),
           image: safeUrl(n.teaserImage?.imageVariants?.['16x9-640'] || n.teaserImage?.imageVariants?.['16x9-512'] || ''),

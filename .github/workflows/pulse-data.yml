@@ -44,6 +44,11 @@ jobs:
             "https://site.web.api.espn.com/apis/v2/sports/soccer/ger.1/standings" \
             "https://site.web.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams" \
             "https://site.web.api.espn.com/apis/common/v3/sports/soccer/ger.1/athletes/148455" \
+            "https://site.web.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams/132/roster" \
+            "https://site.web.api.espn.com/apis/site/v2/sports/soccer/ger.1/teams/132/schedule" \
+            "https://site.web.api.espn.com/apis/site/v2/sports/soccer/ger.1/summary?event=704393" \
+            "https://query1.finance.yahoo.com/v8/finance/chart/SAP.DE?range=1d&interval=5m" \
+            "https://stooq.com/q/l/?s=sap.de&f=sd2t2ohlcv&h&e=json" \
             "https://api.openligadb.de/getgoalgetters/bl1/2026" \
             "https://content.guardianapis.com/search?api-key=test&page-size=1" \
             "https://api.coingecko.com/api/v3/ping" \

@@ -57,8 +57,6 @@ export const SOURCES = [
   { id: 'bbc', name: 'BBC News', color: '#bb1919', intl: true, desc: 'Großbritannien · englisch', feeds: {
     top: 'https://feeds.bbci.co.uk/news/rss.xml', welt: 'https://feeds.bbci.co.uk/news/world/rss.xml', wirtschaft: 'https://feeds.bbci.co.uk/news/business/rss.xml',
     tech: 'https://feeds.bbci.co.uk/news/technology/rss.xml', wissen: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', sport: 'https://feeds.bbci.co.uk/sport/rss.xml' } },
-  { id: 'guardian', name: 'The Guardian', color: '#052962', intl: true, kind: 'guardian', desc: 'Großbritannien · Volltext in der App',
-    sections: { top: '', politik: 'politics', welt: 'world', wirtschaft: 'business', boerse: 'business', sport: 'sport', tech: 'technology', wissen: 'science', kultur: 'culture' } },
   { id: 'nyt', name: 'New York Times', color: '#111111', intl: true, off: true, desc: 'USA · englisch', feeds: {
     top: 'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml', welt: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
     wirtschaft: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml', tech: 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml',

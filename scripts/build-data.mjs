@@ -16,7 +16,7 @@ async function get(url, { timeout = 12000, json = false, headers = {} } = {}) {
   const t = setTimeout(() => c.abort(), timeout);
   try {
     const r = await fetch(url, { signal: c.signal, redirect: 'follow', headers: { 'User-Agent': UA, 'Accept-Language': 'de-DE,de;q=0.9,en;q=0.7', ...headers } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 120).replace(/\s+/g, ' '));
     return json ? await r.json() : await r.text();
   } finally { clearTimeout(t); }
 }
@@ -316,6 +316,7 @@ async function buildMarkets() {
       stats.quotes++;
     } catch (e) {
       stats.quoteErr++;
+      if (stats.quoteErr <= 3) console.log(`Kurs ${sym}: ${e.message}`);
       if (old?.meta) quotes[sym] = { ...old.meta, spark: (old.d1?.c || []).filter((_, i) => i % 3 === 0), stale: true };
     }
   });
@@ -333,6 +334,7 @@ async function buildSports() {
     for (const [kind, url] of [
       ['scoreboard', `https://site.api.espn.com/apis/site/v2/sports/${l.key}/scoreboard`],
       ['standings', `https://site.api.espn.com/apis/v2/sports/${l.key}/standings`],
+      ...(l.noTeams ? [] : [['teams', `https://site.api.espn.com/apis/site/v2/sports/${l.key}/teams`]]),
     ]) {
       try { await write(`sports/${f}-${kind}.json`, await get(url, { json: true, headers: { 'User-Agent': 'curl/8.5.0' } })); stats.sports++; }
       catch (e) { console.log(`sport ${l.key} ${kind}: ${e.message}`); }

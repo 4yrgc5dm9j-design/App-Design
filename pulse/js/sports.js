@@ -1,13 +1,21 @@
 // Sport: Live-Ergebnisse, Tabellen, Teams, Kader & Spielerdaten (ESPN), Torjäger (OpenLigaDB)
 import { state, save, cached, invalidate } from './store.js';
-import { fetchJSON, pool } from './net.js';
+import { fetchJSON, pool, DATA } from './net.js';
 import { esc, safeUrl, icon, openSheet, toast, skeletonList, empty, errorBox, dayLabel, clock, $$ } from './ui.js';
 import { artRow, searchNews } from './news.js';
 
 import { LEAGUES } from './sources.js';
 export { LEAGUES };
 export const leagueBy = k => LEAGUES.find(l => l.key === k);
-const API = 'https://site.api.espn.com/apis/site/v2/sports/';
+// site.web.api.espn.com erlaubt Browser-Abrufe (CORS); site.api.espn.com blockiert Browser
+const API = 'https://site.web.api.espn.com/apis/site/v2/sports/';
+const STAND = 'https://site.web.api.espn.com/apis/v2/sports/';
+// Fallback: vom Daten-Job gespeicherte Kopien
+const backup = (key, kind) => fetchJSON(`${DATA}sports/${key.replace('/', '_')}-${kind}.json`);
+async function espn(url, key, kind) {
+  try { return await fetchJSON(url); }
+  catch (e) { if (kind) return backup(key, kind); throw e; }
+}
 const isSoccer = k => k.startsWith('soccer/');
 
 // ---------- Daten ----------
@@ -42,13 +50,13 @@ export async function scoreboard(key, week = null) {
     url += `?dates=${ymd(s)}-${ymd(e)}&limit=200`;
   }
   return cached('sb:' + url, 30e3, async () => {
-    const d = await fetchJSON(url);
+    const d = await espn(url, key, !week ? 'scoreboard' : null);
     return (d.events || []).map(e => parseEvent(e, key)).sort((a, b) => a.date - b.date);
   });
 }
 export async function standings(key) {
   return cached('st:' + key, 10 * 60e3, async () => {
-    const d = await fetchJSON(`https://site.api.espn.com/apis/v2/sports/${key}/standings`);
+    const d = await espn(`${STAND}${key}/standings`, key, 'standings');
     const groups = d.children?.length ? d.children : [d];
     return groups.map(g => ({
       name: g.name || '',
@@ -64,7 +72,7 @@ export async function standings(key) {
 }
 export async function teams(key) {
   return cached('tm:' + key, 24 * 3600e3, async () => {
-    const d = await fetchJSON(`${API}${key}/teams`);
+    const d = await espn(`${API}${key}/teams`, key, 'teams');
     return (d.sports?.[0]?.leagues?.[0]?.teams || []).map(x => x.team).map(t => ({
       id: t.id, name: t.shortDisplayName || t.displayName, full: t.displayName, logo: safeUrl(t.logos?.[0]?.href || ''), color: t.color,
     })).sort((a, b) => a.name.localeCompare(b.name, 'de'));

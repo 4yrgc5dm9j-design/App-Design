@@ -1,6 +1,7 @@
 // Börse: Kurse (Yahoo Finance), Krypto (CoinGecko), Watchlist, Charts & technische Analyse
 import { state, save, cached, invalidate } from './store.js';
-import { fetchJSON, pool } from './net.js';
+import { fetchJSON, pool, DATA, hasProxy } from './net.js';
+import { MARKET_UNIVERSE, symFile } from './sources.js';
 import { esc, safeUrl, icon, num, pct, priceFmt, compact, openSheet, toast, sparkSvg, lineChart, skeletonList, empty, errorBox, hashColor, timeAgo } from './ui.js';
 import { artRow, loadCategory, searchNews, merge } from './news.js';
 
@@ -9,7 +10,7 @@ export const INDICES = [
   { s: '^GSPC', n: 'S&P 500' }, { s: '^IXIC', n: 'Nasdaq' }, { s: '^DJI', n: 'Dow Jones' }, { s: '^N225', n: 'Nikkei 225' },
   { s: 'EURUSD=X', n: 'EUR/USD' }, { s: 'GC=F', n: 'Gold' }, { s: 'BZ=F', n: 'Öl (Brent)' }, { s: 'BTC-EUR', n: 'Bitcoin' },
 ];
-const KNOWN = Object.fromEntries(INDICES.map(i => [i.s, i.n]));
+const KNOWN = { ...Object.fromEntries(INDICES.map(i => [i.s, i.n])), '^FTSE': 'FTSE 100', '^SSMI': 'SMI', '^HSI': 'Hang Seng', 'EURGBP=X': 'EUR/GBP', 'EURCHF=X': 'EUR/CHF', 'SI=F': 'Silber', 'CL=F': 'Öl (WTI)', 'ETH-EUR': 'Ethereum', 'SOL-EUR': 'Solana', 'XRP-EUR': 'XRP' };
 const Y1 = 'https://query1.finance.yahoo.com', Y2 = 'https://query2.finance.yahoo.com';
 
 function quoteFromChart(symbol, r) {
@@ -28,32 +29,85 @@ function quoteFromChart(symbol, r) {
   };
 }
 
+// Kursdaten des Daten-Jobs (alle 10 Min.) für eine feste Auswahl an Werten
+const qFile = () => cached('mq', 2 * 60e3, () => fetchJSON(`${DATA}markets/quotes.json`, { validate: j => !!j?.quotes }));
+const symData = sym => cached('ms:' + sym, 2 * 60e3, () => fetchJSON(`${DATA}markets/s/${symFile(sym)}.json`, { validate: j => !!j?.meta }), { persist: false });
+function fromMeta(symbol, m) {
+  const change = m.price != null && m.prev != null ? m.price - m.prev : null;
+  return {
+    symbol, name: KNOWN[symbol] || m.name || symbol, longName: m.longName || m.name || symbol,
+    price: m.price, prev: m.prev, change, changePct: m.prev ? (m.price / m.prev - 1) * 100 : null,
+    currency: m.currency || '', exchange: m.exchange || '', dayHigh: m.dayHigh, dayLow: m.dayLow, volume: m.volume,
+    high52: m.high52, low52: m.low52, type: m.type || '', time: m.time || 0,
+  };
+}
+function sliceRange(rec, range) {
+  const pick = s => ({ t: (s?.t || []).map(x => x * 1000), c: s?.c || [] });
+  if (range === '1d') return pick(rec.d1);
+  if (range === '5d') return pick(rec.d5 || rec.d1);
+  if (range === '5y') return pick(rec.y5 || rec.y1);
+  const y = pick(rec.y1);
+  let from = 0;
+  if (range === '1mo') from = Date.now() - 31 * 864e5;
+  else if (range === '6mo') from = Date.now() - 183 * 864e5;
+  else if (range === 'ytd') from = new Date(new Date().getFullYear(), 0, 1).getTime();
+  const i = Math.max(0, y.t.findIndex(t => t >= from));
+  return { t: y.t.slice(i), c: y.c.slice(i) };
+}
+async function liveChart(symbol, range, interval) {
+  const d = await fetchJSON(`${Y1}/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false`,
+    { validate: j => !!j?.chart?.result?.[0] });
+  return quoteFromChart(symbol, d.chart.result[0]);
+}
 export async function chart(symbol, range = '1d', interval = '5m') {
-  return cached(`yc:${symbol}:${range}:${interval}`, range === '1d' ? 60e3 : 15 * 60e3, async () => {
-    const d = await fetchJSON(`${Y1}/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false`,
-      { validate: j => !!j?.chart?.result?.[0] });
-    return quoteFromChart(symbol, d.chart.result[0]);
+  return cached(`yc:${symbol}:${range}:${interval}`, range === '1d' ? 60e3 : 10 * 60e3, async () => {
+    if (hasProxy()) { try { return await liveChart(symbol, range, interval); } catch { /* Fallback: Daten-Job */ } }
+    const rec = await symData(symbol).catch(() => { throw new Error(`Für ${symbol} gibt es ohne eigenen Proxy keine Kursdaten`); });
+    const s = sliceRange(rec, range);
+    return { ...fromMeta(symbol, rec.meta), t: s.t, closes: s.c };
   }, { persist: range === '1d' });
 }
 
 export async function quotes(symbols) {
-  const out = await pool(symbols, 4, s => chart(s, '1d', '15m'));
-  return out.filter(Boolean);
+  let map = {};
+  try { map = (await qFile()).quotes; } catch { /* offline */ }
+  const out = await pool(symbols, 4, async s => {
+    if (map[s]) return { ...fromMeta(s, map[s]), closes: map[s].spark || [] };
+    if (hasProxy()) return chart(s, '1d', '15m');
+    return null;
+  });
+  const res = out.filter(Boolean);
+  if (!res.length && symbols.length) throw new Error('Kurse gerade nicht erreichbar');
+  return res;
 }
 
 export async function searchSymbols(q) {
-  const d = await fetchJSON(`${Y2}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=8&lang=de-DE&region=DE&enableFuzzyQuery=true`);
-  return {
-    quotes: (d.quotes || []).filter(x => x.symbol && x.quoteType !== 'OPTION'),
-    news: (d.news || []).map(n => ({
-      id: 'y' + n.uuid, title: n.title, teaser: '', url: safeUrl(n.link), date: (n.providerPublishTime || 0) * 1000,
-      image: safeUrl(n.thumbnail?.resolutions?.[0]?.url || ''), source: 'yahoo', publisher: n.publisher || 'Yahoo Finance', cat: 'boerse',
-    })).filter(n => n.url),
-  };
+  if (hasProxy()) {
+    try {
+      const d = await fetchJSON(`${Y2}/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=8&lang=de-DE&region=DE&enableFuzzyQuery=true`);
+      return {
+        quotes: (d.quotes || []).filter(x => x.symbol && x.quoteType !== 'OPTION'),
+        news: (d.news || []).map(n => ({
+          id: 'y' + n.uuid, title: n.title, teaser: '', url: safeUrl(n.link), date: (n.providerPublishTime || 0) * 1000,
+          image: safeUrl(n.thumbnail?.resolutions?.[0]?.url || ''), source: 'yahoo', publisher: n.publisher || 'Yahoo Finance', cat: 'boerse',
+        })).filter(n => n.url),
+      };
+    } catch { /* Fallback: lokale Liste */ }
+  }
+  const map = (await qFile()).quotes;
+  const n = q.toLowerCase();
+  const quotes = MARKET_UNIVERSE.filter(sym => map[sym]).map(sym => ({ sym, m: map[sym] }))
+    .filter(({ sym, m }) => sym.toLowerCase().includes(n) || (m.name || '').toLowerCase().includes(n) || (m.longName || '').toLowerCase().includes(n) || (KNOWN[sym] || '').toLowerCase().includes(n))
+    .slice(0, 15)
+    .map(({ sym, m }) => ({ symbol: sym, shortname: KNOWN[sym] || m.name, longname: m.longName, exchDisp: m.exchange, quoteType: /^\^/.test(sym) ? 'INDEX' : /-EUR$/.test(sym) ? 'CRYPTOCURRENCY' : (m.type || 'EQUITY'), typeDisp: m.type }));
+  return { quotes, news: [] };
 }
 
 export async function crypto() {
-  return cached('cg:markets', 90e3, () => fetchJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&order=market_cap_desc&per_page=12&page=1&sparkline=true&price_change_percentage=24h,7d'));
+  return cached('cg:markets', 90e3, async () => {
+    try { return await fetchJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=eur&order=market_cap_desc&per_page=12&page=1&sparkline=true&price_change_percentage=24h,7d', { validate: Array.isArray }); }
+    catch { return fetchJSON(`${DATA}markets/crypto.json`, { validate: Array.isArray }); }
+  });
 }
 
 // ---------- Technische Analyse ----------
@@ -200,8 +254,8 @@ export function openFinder(onChange) {
     onClose: onChange,
     render: body => {
       body.innerHTML = `
-        <form class="search" role="search">${icon('search')}<input type="search" placeholder="Name, WKN-Name oder Symbol (z. B. Siemens, AAPL)" enterkeyhint="search" autofocus></form>
-        <p class="muted" style="font-size:13px">Tipp: Aktien, ETFs, Indizes, Währungen und Kryptos. Deutsche Börsenplätze enden auf „.DE“.</p>
+        <form class="search" role="search">${icon('search')}<input type="search" placeholder="Name oder Symbol (z. B. Siemens, Apple, DAX)" enterkeyhint="search" autofocus></form>
+        <p class="muted" style="font-size:13px">Über 110 Werte: alle DAX-40-Aktien, große US- und Europa-Werte, Indizes, ETFs, Rohstoffe, Währungen und Kryptos.</p>
         <div data-res></div>`;
       const input = body.querySelector('input'), res = body.querySelector('[data-res]');
       let t;

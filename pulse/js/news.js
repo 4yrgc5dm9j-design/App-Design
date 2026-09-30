@@ -1,6 +1,6 @@
 // Nachrichten: Quellen, Laden & Parsen, Themen-Matching, In-App-Leser, News-Tab
 import { state, save, cached, invalidate } from './store.js';
-import { fetchText, fetchJSON, isXml, pool } from './net.js';
+import { fetchText, fetchJSON, isXml, pool, DATA, hasProxy } from './net.js';
 import { esc, safeUrl, stripHtml, timeAgo, icon, openSheet, toast, skeletonList, empty, errorBox, $$ } from './ui.js';
 
 import { CATS, SOURCES, catLabel } from './sources.js';
@@ -129,7 +129,8 @@ function sourceTasks(cat) {
       if (cat === 'politik') tasks.push(() => loadTagesschau('ausland', cat));
     } else if (s.kind === 'guardian') {
       if (cat in s.sections) tasks.push(() => loadGuardian(s.sections[cat], cat));
-    } else if (s.feeds?.[cat]) {
+    } else if (s.feeds?.[cat] && hasProxy()) {
+      // RSS-Feeds live nur mit eigenem Proxy – sonst liefert sie der Daten-Job
       tasks.push(() => loadRss(s.feeds[cat], s.id, cat));
     }
   }
@@ -137,40 +138,64 @@ function sourceTasks(cat) {
 }
 
 export function merge(lists) {
-  const seen = new Set(), out = [];
+  const seen = new Map(), out = [];
   for (const it of lists.flat().filter(Boolean).sort((a, b) => b.date - a.date)) {
     const k = titleKey(it.title);
-    if (seen.has(k) || seen.has(it.id)) continue;
-    seen.add(k); seen.add(it.id);
+    const prev = seen.get(k) || seen.get(it.id);
+    if (prev) { if (it.body && !prev.body) prev.body = 1; continue; }
+    seen.set(k, it); seen.set(it.id, it);
     out.push(it);
   }
   return out;
 }
 
+// Vom Daten-Job gesammelte Artikel einer Kategorie (alle Quellen, inkl. Volltext-Markierung)
+export async function loadFeed(cat) {
+  const d = await cached('feed:' + cat, 3 * 60e3, () => fetchJSON(`${DATA}news/${cat}.json`, { validate: j => Array.isArray(j?.items) }));
+  return d.items;
+}
+const allowed = it => { const s = srcById(it.source); return !s || isEnabled(s); };
+
 export async function loadCategory(cat) {
-  const lists = await pool(sourceTasks(cat), 5, t => t());
-  const items = merge(lists);
-  if (!items.length && lists.every(l => l == null)) throw new Error('Keine Quelle erreichbar');
+  const lists = await pool([() => loadFeed(cat), ...sourceTasks(cat)], 5, t => t());
+  const items = merge(lists).filter(allowed);
+  if (!items.length && lists.every(l => l == null)) throw new Error('Keine Quelle erreichbar – bitte Internetverbindung prüfen');
   return items;
 }
+async function allFeeds() {
+  const lists = await pool(CATS.map(c => c.id), 5, c => loadFeed(c));
+  return merge(lists).filter(allowed);
+}
 
-// Suche über mehrere Anbieter
+// Suche: alle gesammelten Artikel + tagesschau-Suche (+ Google News mit eigenem Proxy)
 function gnSearchUrl(q) { return `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=de&gl=DE&ceid=DE:de`; }
-export async function searchNews(q, { days = 7 } = {}) {
+function queryMatcher(q) {
+  const alts = q.split(/\s+OR\s+/).map(a => a.replace(/"/g, '').toLowerCase().split(/\s+/).filter(w => w.length > 1)).filter(a => a.length);
+  return it => {
+    const hay = `${it.title} ${it.teaser || ''} ${(it.tags || []).join(' ')}`.toLowerCase();
+    return alts.some(words => words.every(w => hay.includes(w)));
+  };
+}
+function liveSearchTasks(q, days) {
+  const first = q.split(/\s+OR\s+/)[0].replace(/"/g, '');
   const tasks = [
-    () => cached('tss:' + q, TTL(), async () => {
-      const d = await fetchJSON(`https://www.tagesschau.de/api2u/search/?searchText=${encodeURIComponent(q)}&pageSize=30&resultPage=0`);
+    () => cached('tss:' + first, TTL(), async () => {
+      const d = await fetchJSON(`https://www.tagesschau.de/api2u/search/?searchText=${encodeURIComponent(first)}&pageSize=30&resultPage=0`);
       return (d.searchResults || []).filter(t => t.title).map(t => normTs(t, 'top'));
     }),
-    () => cached('gns:' + q + days, TTL(), async () => {
-      const txt = await fetchText(gnSearchUrl(q + (days ? ` when:${days}d` : '')), { validate: isXml });
-      return parseFeed(txt, 'google', 'top');
-    }),
   ];
-  const gu = srcById('guardian');
-  if (isEnabled(gu)) tasks.push(() => loadGuardian('', 'top', q));
-  const lists = await pool(tasks, 3, t => t());
-  return merge(lists);
+  if (hasProxy()) tasks.push(() => cached('gns:' + q + days, TTL(), async () => {
+    const txt = await fetchText(gnSearchUrl(q + (days ? ` when:${days}d` : '')), { validate: isXml });
+    return parseFeed(txt, 'google', 'top');
+  }));
+  return tasks;
+}
+export async function searchNews(q, { days = 7 } = {}) {
+  const m = queryMatcher(q);
+  const lists = await pool([() => allFeeds().then(l => l.filter(m)), ...liveSearchTasks(q, days)], 4, t => t());
+  if (lists.every(l => l == null)) throw new Error('Suche gerade nicht erreichbar');
+  const since = days ? Date.now() - days * 864e5 : 0;
+  return merge(lists).filter(i => allowed(i) && (!i.date || i.date >= since - 864e5));
 }
 
 // ---------- Themen ----------
@@ -186,14 +211,12 @@ export async function loadTopic(topic) {
   const m = topicMatcher(topic);
   const kws = (topic.keywords || []).filter(Boolean);
   const q = kws.slice(0, 5).map(k => k.includes(' ') ? `"${k}"` : k).join(' OR ');
-  const tasks = [() => loadCategory('top')];
+  const tasks = [() => allFeeds(), () => loadCategory('top')];
   if (topic.category && topic.category !== 'top') tasks.push(() => loadCategory(topic.category));
-  if (q) tasks.push(() => searchNews(q, { days: 3 }).catch(() => []));
-  const lists = await Promise.all(tasks.map(t => t().catch(() => [])));
-  // Suchtreffer sind schon relevant; Kategorie-Artikel werden per Stichwort gefiltert
-  const searchHits = q ? (lists.pop() || []).filter(i => m(i) || i.source === 'google') : [];
-  const feedHits = lists.flat().filter(m);
-  return merge([feedHits, searchHits]);
+  const live = q ? liveSearchTasks(q, 3) : [];
+  const lists = await pool([...tasks, ...live], 4, t => t());
+  // Suchtreffer (Google News) sind schon relevant; alles andere wird per Stichwort gefiltert
+  return merge(lists.flat().filter(Boolean).filter(i => m(i) || (i.source === 'google' && q))).filter(allowed);
 }
 
 // Eilmeldungen: markierte Meldungen + ganz neue Treffer in Themen mit Alarm
@@ -306,18 +329,26 @@ function blocksHtml(blocks) {
 }
 
 async function loadFullText(it) {
+  if (it.body) {
+    try {
+      const d = await cached('art:' + it.id, 3600e3, () => fetchJSON(`${DATA}articles/${it.id}.json`, { validate: j => Array.isArray(j?.blocks) }), { persist: false });
+      if (d.blocks.length) return { html: blocksHtml(d.blocks), image: d.image };
+    } catch { /* weiter mit Live-Quellen */ }
+  }
   if (it.details) {
-    const d = await cached('tsd:' + it.details, 3600e3, () => fetchJSON(it.details), { persist: false });
-    const parts = (d.content || []).map(c => {
-      if (c.type === 'text' || c.type === 'headline') return sanitize(c.value || '');
-      if (c.type === 'quotation' && c.quotation?.text) return `<blockquote>${esc(c.quotation.text)}</blockquote>`;
-      if (c.type === 'box' && c.box) return `<div class="box"><strong>${esc(stripHtml(c.box.title || ''))}</strong>${sanitize(c.box.text || '')}</div>`;
-      return '';
-    }).join('');
-    if (parts) return { html: parts };
+    try {
+      const d = await cached('tsd:' + it.details, 3600e3, () => fetchJSON(it.details), { persist: false });
+      const parts = (d.content || []).map(c => {
+        if (c.type === 'text' || c.type === 'headline') return sanitize(c.value || '');
+        if (c.type === 'quotation' && c.quotation?.text) return `<blockquote>${esc(c.quotation.text)}</blockquote>`;
+        if (c.type === 'box' && c.box) return `<div class="box"><strong>${esc(stripHtml(c.box.title || ''))}</strong>${sanitize(c.box.text || '')}</div>`;
+        return '';
+      }).join('');
+      if (parts) return { html: parts };
+    } catch { /* weiter */ }
   }
   if (it.html) return { html: sanitize(it.html) };
-  if (!it.url || /news\.google\.com/.test(it.url)) return null;
+  if (!it.url || /news\.google\.com/.test(it.url) || !hasProxy()) return null;
   const page = await cached('page:' + it.url, 3600e3, () => fetchText(it.url, { timeout: 15000, validate: t => /<html|<body|<article/i.test(t) }), { persist: false });
   const ex = extractArticle(page);
   if (ex.blocks.length < 2) return { image: ex.image };
