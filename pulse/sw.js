@@ -1,5 +1,5 @@
 // Service Worker: App-Shell offline verfügbar machen
-const VERSION = 'pulse-v2';
+const VERSION = 'pulse-v3';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/sources.js', 'js/store.js', 'js/net.js', 'js/ui.js', 'js/news.js', 'js/markets.js',

@@ -28,7 +28,7 @@ jobs:
           mkdir -p site
           cp -r pulse site/pulse
           # Startseite leitet direkt zur App weiter
-          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=pulse/"><title>Pulse</title><a href="pulse/">Pulse öffnen</a>\n' > site/index.html
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=pulse/"><title>newszentrale</title><a href="pulse/">newszentrale öffnen</a>\n' > site/index.html
           touch site/.nojekyll
       - uses: actions/configure-pages@v5
         with:

@@ -200,7 +200,7 @@ export function openSettings(onDone) {
             <div class="seg" style="width:220px" data-theme>${[['auto', 'Auto'], ['light', 'Hell'], ['dark', 'Dunkel']].map(([v, l]) => `<button class="${s.theme === v ? 'active' : ''}" data-v="${v}">${l}</button>`).join('')}</div></div>
           <div class="set-row"><div class="tx"><b>Automatisch aktualisieren</b><span>Dashboard & News</span></div>
             <select class="input" style="width:130px" data-refresh>${[2, 5, 10, 15, 30].map(m => `<option value="${m}" ${s.refresh === m ? 'selected' : ''}>alle ${m} Min.</option>`).join('')}</select></div>
-          <div class="set-row"><div class="tx"><b>Benachrichtigungen</b><span>Eilmeldungen, solange Pulse geöffnet ist</span></div>
+          <div class="set-row"><div class="tx"><b>Benachrichtigungen</b><span>Eilmeldungen, solange newszentrale geöffnet ist</span></div>
             <label class="switch"><input type="checkbox" data-notify ${s.notify ? 'checked' : ''}><i></i></label></div>
           <div class="set-row" style="cursor:pointer" data-sources><div class="tx"><b>Nachrichtenquellen</b><span>Redaktionen & Agenturen auswählen</span></div>${icon('right')}</div>
         </div>
@@ -208,7 +208,7 @@ export function openSettings(onDone) {
         <div class="card card-pad">
           <label class="field" style="margin:0"><span>Eigener CORS-Proxy (optional)</span>
           <input class="input" data-proxy value="${esc(s.proxy)}" placeholder="https://mein-proxy.workers.dev/?url=" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-          <p class="disclaimer">Nicht nötig: News, Volltexte und Kurse sammelt Pulse automatisch alle 10 Minuten ein. Mit einem eigenen, kostenlosen Proxy (Cloudflare Worker, siehe README) werden zusätzlich RSS-Feeds sekundengenau live geladen, beliebige Wertpapiere durchsuchbar und Google-News-Suche aktiv.</p>
+          <p class="disclaimer">Nicht nötig: News, Volltexte und Kurse sammelt newszentrale automatisch alle 10 Minuten ein. Mit einem eigenen, kostenlosen Proxy (Cloudflare Worker, siehe README) werden zusätzlich RSS-Feeds sekundengenau live geladen, beliebige Wertpapiere durchsuchbar und Google-News-Suche aktiv.</p>
         </div>
         <div class="section-title"><h2>Daten</h2></div>
         <div class="card">
@@ -217,7 +217,7 @@ export function openSettings(onDone) {
           <div class="set-row" style="cursor:pointer" data-reset><div class="tx"><b style="color:var(--down)">Alles zurücksetzen</b><span>Profil, Themen, Watchlist & Cache löschen</span></div>${icon('trash')}</div>
         </div>
         <input type="file" accept="application/json" class="hidden" data-file>
-        <p class="disclaimer" style="text-align:center;margin-top:20px">Pulse · kostenlos & werbefrei · Daten nur lokal gespeichert</p>`;
+        <p class="disclaimer" style="text-align:center;margin-top:20px">newszentrale · kostenlos & werbefrei · Daten nur lokal gespeichert</p>`;
       body.querySelector('[data-theme]').addEventListener('click', e => {
         const b = e.target.closest('[data-v]'); if (!b) return;
         s.theme = b.dataset.v; save(); applyTheme();
@@ -279,7 +279,7 @@ export function renderMore(root, app) {
       ['sources', 'Quellen', 'Redaktionen wählen', 'layers', 'linear-gradient(135deg,#0ea5e9,#2563eb)'],
       ['settings', 'Einstellungen', 'Design, Updates, Daten', 'settings', 'linear-gradient(135deg,#64748b,#334155)'],
       ['install', 'Zum Home-Bildschirm', 'Als App installieren', 'plus', 'linear-gradient(135deg,#a855f7,#ec4899)'],
-      ['about', 'Über Pulse', 'Datenquellen & Datenschutz', 'shield', 'linear-gradient(135deg,#22c55e,#16a34a)'],
+      ['about', 'Über newszentrale', 'Datenquellen & Datenschutz', 'shield', 'linear-gradient(135deg,#22c55e,#16a34a)'],
     ];
     root.innerHTML = `
       <header class="vhead"><div class="wrap"><div class="vhead-row"><h1>Mehr</h1></div></div></header>
@@ -318,7 +318,7 @@ function openInstallHelp() {
     render: body => {
       body.innerHTML = `
         <div class="card card-pad"><h3 style="margin-top:0"> iPhone & iPad (Safari)</h3>
-          <ol style="padding-left:20px;line-height:1.8"><li>Unten auf <b>Teilen</b> ${icon('share', 'sm')} tippen</li><li><b>„Zum Home-Bildschirm“</b> wählen</li><li><b>Hinzufügen</b> – fertig! Pulse startet wie eine echte App im Vollbild.</li></ol></div>
+          <ol style="padding-left:20px;line-height:1.8"><li>Unten auf <b>Teilen</b> ${icon('share', 'sm')} tippen</li><li><b>„Zum Home-Bildschirm“</b> wählen</li><li><b>Hinzufügen</b> – fertig! newszentrale startet wie eine echte App im Vollbild.</li></ol></div>
         <div class="card card-pad" style="margin-top:14px"><h3 style="margin-top:0">🤖 Android (Chrome)</h3>
           <ol style="padding-left:20px;line-height:1.8"><li>Menü <b>⋮</b> oben rechts öffnen</li><li><b>„App installieren“</b> bzw. „Zum Startbildschirm hinzufügen“</li></ol></div>
         <div class="card card-pad" style="margin-top:14px"><h3 style="margin-top:0">💻 Desktop (Chrome / Edge)</h3>
@@ -328,11 +328,11 @@ function openInstallHelp() {
 }
 function openAbout() {
   openSheet({
-    title: 'Über Pulse',
+    title: 'Über newszentrale',
     render: body => {
       body.innerHTML = `<div class="reader"><div class="content">
         <h2>Deine All-in-One-News-App</h2>
-        <p>Pulse bündelt Nachrichten, Börse, Sport, Live-TV und Wissen an einem Ort – kostenlos, ohne Konto und ohne Werbung.</p>
+        <p>newszentrale bündelt Nachrichten, Börse, Sport, Live-TV und Wissen an einem Ort – kostenlos, ohne Konto und ohne Werbung.</p>
         <h3>Datenquellen</h3>
         <ul><li><b>Nachrichten:</b> tagesschau (API), SPIEGEL, ZEIT, F.A.Z., SZ, n-tv, WELT, Handelsblatt, Deutschlandfunk, DW, heise, t3n, kicker, BBC, NYT, Al Jazeera sowie Google News (Meldungen hunderter Verlage und Agenturen) – über öffentliche RSS-Feeds.</li>
         <li><b>Börse:</b> Yahoo Finance (Kurse, teils verzögert), CoinGecko (Krypto).</li>
@@ -359,7 +359,7 @@ export function runOnboarding(done) {
   const steps = [
     () => `
       <div class="logo-big"><svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg></div>
-      <h1>Willkommen bei <span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Pulse</span></h1>
+      <h1>Willkommen bei <span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">newszentrale</span></h1>
       <p class="lead">Alle Nachrichten, Börsenkurse, Live-Sport und Wissen – in einer App, kostenlos.</p>
       <div class="feature-list">
         <div><span class="fi">📰</span>Über 16 Redaktionen & hunderte Verlage</div>
