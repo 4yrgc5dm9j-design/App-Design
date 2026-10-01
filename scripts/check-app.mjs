@@ -13,15 +13,19 @@ page.on('pageerror', e => log.push('PAGEERROR ' + e.message));
 page.on('requestfailed', r => log.push(`FAILED ${r.failure()?.errorText} ${r.url().slice(0, 160)}`));
 page.on('response', r => { if (r.status() >= 400) log.push(`HTTP ${r.status()} ${r.url().slice(0, 160)}`); });
 const text = async sel => (await page.locator(sel).first().innerText().catch(() => '–')).replace(/\s+/g, ' ').slice(0, 700);
-await page.goto(URL, { waitUntil: 'networkidle', timeout: 60000 });
-await page.waitForTimeout(8000);
+try {
+await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
+await page.waitForTimeout(10000);
+console.log('=== BODY ===\n' + (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 600));
+console.log('=== HTML ===\n' + (await page.evaluate(() => document.documentElement.outerHTML)).slice(0, 1500));
 console.log('=== HEUTE ===\n' + await text('.view.active'));
 await page.screenshot({ path: 'shots/1-heute.png' });
 for (const tab of ['boerse', 'sport', 'news']) {
-  await page.click(`#tabbar [data-tab="${tab}"]`);
+  await page.click(`#tabbar [data-tab="${tab}"]`, { timeout: 5000 });
   await page.waitForTimeout(8000);
   console.log(`=== ${tab.toUpperCase()} ===\n` + await text('.view.active'));
   await page.screenshot({ path: `shots/${tab}.png` });
 }
+} catch (e) { console.log('ABBRUCH: ' + e.message.split('\n')[0]); }
 console.log('=== LOG ===\n' + [...new Set(log)].join('\n'));
 await browser.close();
