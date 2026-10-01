@@ -25,10 +25,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Seite vorbereiten
         run: |
-          mkdir -p site
-          cp -r pulse site/pulse
-          # Startseite leitet direkt zur App weiter
-          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=pulse/"><title>newszentrale</title><a href="pulse/">newszentrale öffnen</a>\n' > site/index.html
+          mkdir -p site/pulse
+          cp -r pulse site/newszentrale
+          # Startseite und alte Adresse leiten zur App weiter
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=newszentrale/"><title>newszentrale</title><a href="newszentrale/">newszentrale öffnen</a>\n' > site/index.html
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=../newszentrale/"><title>newszentrale</title><script>navigator.serviceWorker&&navigator.serviceWorker.getRegistrations().then(r=>r.forEach(x=>x.unregister()))</script><a href="../newszentrale/">newszentrale öffnen</a>\n' > site/pulse/index.html
           touch site/.nojekyll
       - uses: actions/configure-pages@v5
         with:

@@ -236,7 +236,7 @@ export function openSettings(onDone) {
       body.querySelector('[data-export]').onclick = () => {
         const blob = new Blob([exportState()], { type: 'application/json' });
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob); a.download = 'pulse-einstellungen.json'; a.click();
+        a.href = URL.createObjectURL(blob); a.download = 'newszentrale-einstellungen.json'; a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       };
       const file = body.querySelector('[data-file]');
