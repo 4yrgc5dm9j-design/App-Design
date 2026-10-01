@@ -19,7 +19,7 @@ export const WIDGETS = {
 
 function greeting() {
   const h = new Date().getHours();
-  return h < 5 ? 'Gute Nacht' : h < 11 ? 'Guten Morgen' : h < 17 ? 'Hallo' : h < 22 ? 'Guten Abend' : 'Gute Nacht';
+  return h < 5 ? 'Hallo' : h < 11 ? 'Guten Morgen' : h < 17 ? 'Hallo' : h < 23 ? 'Guten Abend' : 'Gute Nacht';
 }
 function isBirthday() {
   const b = state.profile.birthday;
