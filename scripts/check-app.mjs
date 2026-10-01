@@ -4,7 +4,7 @@ const URL = process.argv[2];
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ ...devices['iPhone 14'] });
 await ctx.addInitScript(() => {
-  if (!localStorage.getItem('pulse.state.v1')) localStorage.setItem('pulse.state.v1', JSON.stringify({ onboarded: true, profile: { name: 'Test', city: 'Berlin', lat: 52.52, lon: 13.405 } }));
+  if (!localStorage.getItem('pulse.state.v1')) localStorage.setItem('pulse.state.v1', JSON.stringify({ onboarded: true, profile: { name: 'Test', city: 'Berlin', lat: 52.52, lon: 13.405 }, favLeagues: ['soccer/ger.1', 'national/dfb'], favTeams: [{ key: 'soccer/ger.1', id: '132', name: 'Bayern', full: 'Bayern Munich' }] }));
 });
 const page = await ctx.newPage();
 const log = [];
@@ -19,6 +19,8 @@ await page.waitForTimeout(10000);
 console.log('=== BODY ===\n' + (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ').slice(0, 600));
 console.log('=== HTML ===\n' + (await page.evaluate(() => document.documentElement.outerHTML)).slice(0, 1500));
 console.log('=== HEUTE ===\n' + await text('.view.active'));
+console.log('=== MEIN VEREIN ===\n' + await text('[data-w="myteam"]'));
+console.log('=== DFB-KARTE ===\n' + await text('[data-w="dfb"]'));
 await page.screenshot({ path: 'shots/1-heute.png' });
 for (const tab of ['boerse', 'sport', 'news']) {
   await page.evaluate(t => document.querySelector(`#tabbar [data-tab="${t}"]`).click(), tab);

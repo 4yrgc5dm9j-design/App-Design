@@ -3,7 +3,7 @@ import { state, save, invalidate } from './store.js';
 import { esc, icon, timeAgo, skeletonList, empty, errorBox, initials, dayLabel } from './ui.js';
 import { loadCategory, loadTopic, topicMatcher, artRow, artHero, register, CATS, searchNews } from './news.js';
 import { quotes, quoteTile } from './markets.js';
-import { dashboardGames, matchRow, leagueBy, myTeam, schedule, teamPosition, openTeamPicker } from './sports.js';
+import { dashboardGames, matchRow, leagueBy, myTeam, schedule, teamPosition, openTeamPicker, clubNews, nationalGames } from './sports.js';
 import { weather, wmo, CHANNELS, channelCard } from './extras.js';
 import { openTopicEditor, openDashboardEditor } from './settings.js';
 
@@ -61,6 +61,9 @@ export function renderDashboard(root, app) {
       if (w.type === 'topics') {
         state.topics.forEach(t => grid.insertAdjacentHTML('beforeend', `<div class="card" data-w="topic" data-topic="${t.id}">${topicHead(t)}${skeletonList(3, false)}</div>`));
         grid.insertAdjacentHTML('beforeend', `<button class="card card-pad" data-add-topic style="display:grid;place-items:center;min-height:120px;border-style:dashed;color:var(--text-3);font-weight:650">${icon('plus', 'lg')}<span style="margin-top:6px">Thema hinzufügen</span></button>`);
+      } else if (w.type === 'myteam') {
+        grid.insertAdjacentHTML('beforeend', `<div class="card" data-w="myteam">${skeleton('myteam')}</div>`);
+        if (state.favLeagues.includes('national/dfb')) grid.insertAdjacentHTML('beforeend', `<div class="card" data-w="dfb">${skeleton('myteam')}</div>`);
       } else if (w.type === 'breaking') {
         grid.insertAdjacentHTML('beforeend', `<div class="span-all hidden" data-w="breaking"></div>`);
       } else {
@@ -106,10 +109,32 @@ export function renderDashboard(root, app) {
     const next = sched.find(m => m.state === 'pre' && m.date > now - 3 * 3600e3);
     const last = sched.filter(m => m.state === 'post').pop();
     const part = (lbl, m) => m ? `<div class="day-h" style="padding-bottom:0">${lbl} · ${esc(dayLabel(m.date))}</div>${matchRow(m)}` : '';
-    el.querySelector('[data-games]').innerHTML = (part('Live', live) + part('Nächstes Spiel', next) + part('Letztes Ergebnis', last)) || empty('Keine Spiele gefunden.', '📅');
+    el.querySelector('[data-games]').innerHTML = part('Live', live) +
+      (next ? part('Nächstes Spiel', next) : '<div class="day-h">Nächstes Spiel</div><div class="muted" style="padding:4px 16px 10px;font-size:13.5px">Noch kein Termin angesetzt.</div>') +
+      part('Letztes Ergebnis', last);
     try {
-      const items = await searchNews(t.full || t.name, { days: 7 });
+      const items = await clubNews({ en: t.full, full: t.full, name: t.name });
       el.querySelector('[data-tnews]').innerHTML = items.slice(0, 4).map(i => artRow(i, { compact: true })).join('') || empty('Gerade keine News zu deinem Verein.', '📰');
+    } catch { el.querySelector('[data-tnews]').innerHTML = empty('News gerade nicht erreichbar.', '📰'); }
+  }
+  async function wDfb() {
+    const el = W('dfb');
+    if (!el) return;
+    el.innerHTML = `<div class="card-head" data-go="sport" style="cursor:pointer"><span style="font-size:26px">🇩🇪</span>
+        <h3>DFB-Team<br><small class="muted" style="font-weight:500;font-size:12.5px">Nationalmannschaft</small></h3></div>
+      <div data-games>${skeletonList(2, false)}</div><div class="day-h">News</div><div class="list-card" data-tnews>${skeletonList(3, false)}</div>`;
+    const list = await nationalGames('national/dfb').catch(() => []);
+    const now = Date.now();
+    const live = list.find(m => m.state === 'in');
+    const next = list.find(m => m.state === 'pre' && m.date > now - 3 * 3600e3);
+    const last = list.filter(m => m.state === 'post').pop();
+    const part = (lbl, m) => m ? `<div class="day-h" style="padding-bottom:0">${lbl} · ${esc(dayLabel(m.date))}${m.comp ? ' · ' + esc(m.comp) : ''}</div>${matchRow(m)}` : '';
+    el.querySelector('[data-games]').innerHTML = part('Live', live) +
+      (next ? part('Nächstes Spiel', next) : '<div class="day-h">Nächstes Spiel</div><div class="muted" style="padding:4px 16px 10px;font-size:13.5px">Noch kein Termin angesetzt.</div>') +
+      part('Letztes Ergebnis', last);
+    try {
+      const items = await clubNews({ en: 'Germany', full: 'Germany', name: 'Deutschland' });
+      el.querySelector('[data-tnews]').innerHTML = items.slice(0, 4).map(i => artRow(i, { compact: true })).join('') || empty('Gerade keine News zum DFB-Team.', '📰');
     } catch { el.querySelector('[data-tnews]').innerHTML = empty('News gerade nicht erreichbar.', '📰'); }
   }
   async function wWeather() {
@@ -216,7 +241,7 @@ export function renderDashboard(root, app) {
     running = true;
     root.querySelector('[data-reload]')?.classList.add('spin');
     if (force) invalidate('');
-    const jobs = [wMyTeam(), wWeather(), wMarkets(), wSports()];
+    const jobs = [wMyTeam(), wDfb(), wWeather(), wMarkets(), wSports()];
     wLive();
     // Top-Nachrichten immer laden (für Eilmeldungen), auch wenn Briefing ausgeblendet ist
     jobs.push(W('briefing') ? wBriefing() : loadCategory('top').then(i => collected.set('_top', i)).catch(() => {}));
@@ -251,6 +276,7 @@ export function renderDashboard(root, app) {
   });
 
   function rebuild() { shell(); refresh(); }
+  window.addEventListener('pulse:favs', () => rebuild());
   shell();
   refresh();
   return {

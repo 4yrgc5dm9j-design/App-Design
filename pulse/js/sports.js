@@ -2,7 +2,7 @@
 import { state, save, cached, invalidate } from './store.js';
 import { fetchJSON, pool, DATA } from './net.js';
 import { esc, safeUrl, icon, openSheet, toast, skeletonList, empty, errorBox, dayLabel, clock, $$ } from './ui.js';
-import { artRow, searchNews } from './news.js';
+import { artRow, searchNews, loadCategory, merge } from './news.js';
 
 import { LEAGUES, NATIONAL_COMPS, NATION_DE } from './sources.js';
 export { LEAGUES };
@@ -128,10 +128,105 @@ async function roster(key, id) {
 }
 export async function schedule(key, id) {
   return cached(`sc:${key}:${id}`, 5 * 60e3, async () => {
-    const d = await fetchJSON(`${API}${key}/teams/${id}/schedule`);
-    return (d.events || []).map(e => parseEvent(e, key)).sort((a, b) => a.date - b.date);
+    // Vergangene Spiele + kommende Spiele (fixture=true) + alle Wettbewerbe mit diesem Team
+    const cups = isSoccer(key) ? ['soccer/uefa.champions', 'soccer/uefa.europa', 'soccer/uefa.europa.conf', 'soccer/ger.dfb_pokal'].filter(k => k !== key) : [];
+    const lists = await Promise.all([
+      fetchJSON(`${API}${key}/teams/${id}/schedule`).then(d => (d.events || []).map(e => parseEvent(e, key))).catch(() => []),
+      fetchJSON(`${API}${key}/teams/${id}/schedule?fixture=true`).then(d => (d.events || []).map(e => parseEvent(e, key))).catch(() => []),
+      scoreboard(key).catch(() => []),
+      ...cups.map(k => fetchJSON(`${API}${k}/scoreboard`).then(d => (d.events || []).map(e => parseEvent(e, k))).catch(() => [])),
+    ]);
+    const byId = new Map();
+    for (const m of lists.flat()) {
+      if (!m || !(String(m.home?.id) === String(id) || String(m.away?.id) === String(id))) continue;
+      const prev = byId.get(m.id);
+      // aktuellere Statusdaten (live) bevorzugen
+      if (!prev || (m.state === 'in' && prev.state !== 'in') || (m.state === 'post' && prev.state === 'pre')) byId.set(m.id, m);
+    }
+    return [...byId.values()].sort((a, b) => a.date - b.date);
   }, { persist: false });
 }
+
+// ---------- Vereins-News: nur Artikel über den Verein, nicht über die Stadt ----------
+// ESPN nutzt englische Namen; eindeutige deutsche Namen/Kürzel („strong“) zählen immer,
+// mehrdeutige („weak“, z. B. Städtenamen) nur in Artikeln mit Fußball-Bezug.
+const CLUB_NAMES = {
+  'Bayern Munich': { strong: ['FC Bayern', 'Bayern München', 'FCB'], weak: ['Bayern'] },
+  'Borussia Dortmund': { strong: ['Borussia Dortmund', 'BVB'], weak: ['Dortmund'] },
+  'Bayer Leverkusen': { strong: ['Bayer Leverkusen', 'Bayer 04', 'Werkself'], weak: ['Leverkusen'] },
+  'RB Leipzig': { strong: ['RB Leipzig', 'RasenBallsport'], weak: ['Leipzig'] },
+  'Eintracht Frankfurt': { strong: ['Eintracht Frankfurt', 'SGE'], weak: ['Eintracht', 'Frankfurt'] },
+  'VfB Stuttgart': { strong: ['VfB Stuttgart', 'VfB'], weak: ['Stuttgart'] },
+  'SC Freiburg': { strong: ['SC Freiburg', 'SCF'], weak: ['Freiburg'] },
+  'VfL Wolfsburg': { strong: ['VfL Wolfsburg', 'VfL'], weak: ['Wolfsburg'] },
+  'Borussia Mönchengladbach': { strong: ['Borussia Mönchengladbach', 'Gladbach', 'Fohlen'], weak: ['Mönchengladbach'] },
+  "Borussia M'gladbach": { strong: ['Borussia Mönchengladbach', 'Gladbach', 'Fohlen'], weak: ['Mönchengladbach'] },
+  'Werder Bremen': { strong: ['Werder Bremen', 'SV Werder', 'Werder'], weak: ['Bremen'] },
+  'TSG Hoffenheim': { strong: ['TSG Hoffenheim', '1899 Hoffenheim', 'TSG'], weak: ['Hoffenheim'] },
+  'Union Berlin': { strong: ['Union Berlin', '1. FC Union', 'Eisern Union'], weak: ['Köpenick'] },
+  'FC Augsburg': { strong: ['FC Augsburg', 'FCA'], weak: ['Augsburg'] },
+  'Mainz': { strong: ['Mainz 05', 'FSV Mainz', '1. FSV Mainz'], weak: ['Mainz'] },
+  'Mainz 05': { strong: ['Mainz 05', 'FSV Mainz', '1. FSV Mainz'], weak: ['Mainz'] },
+  'FC Cologne': { strong: ['1. FC Köln', 'FC Köln', 'Effzeh'], weak: ['Köln'] },
+  'Cologne': { strong: ['1. FC Köln', 'FC Köln', 'Effzeh'], weak: ['Köln'] },
+  'Hamburg SV': { strong: ['Hamburger SV', 'HSV'], weak: ['Hamburg'] },
+  'Hamburger SV': { strong: ['Hamburger SV', 'HSV'], weak: ['Hamburg'] },
+  'St. Pauli': { strong: ['FC St. Pauli', 'St. Pauli'], weak: [] },
+  'FC St. Pauli': { strong: ['FC St. Pauli', 'St. Pauli'], weak: [] },
+  'Heidenheim': { strong: ['1. FC Heidenheim', 'FC Heidenheim'], weak: ['Heidenheim'] },
+  '1. FC Heidenheim 1846': { strong: ['1. FC Heidenheim', 'FC Heidenheim'], weak: ['Heidenheim'] },
+  'Schalke 04': { strong: ['FC Schalke', 'Schalke 04', 'Schalke', 'S04', 'Königsblau'], weak: ['Gelsenkirchen'] },
+  'Hertha Berlin': { strong: ['Hertha BSC', 'Hertha'], weak: [] },
+  'SV Elversberg': { strong: ['SV Elversberg', 'Elversberg'], weak: [] },
+  'SC Paderborn 07': { strong: ['SC Paderborn', 'Paderborn 07'], weak: ['Paderborn'] },
+  'Paderborn': { strong: ['SC Paderborn', 'Paderborn 07'], weak: ['Paderborn'] },
+  'VfL Bochum': { strong: ['VfL Bochum'], weak: ['Bochum'] },
+  'Holstein Kiel': { strong: ['Holstein Kiel', 'KSV Holstein'], weak: ['Kiel'] },
+  'Fortuna Düsseldorf': { strong: ['Fortuna Düsseldorf', 'Fortuna'], weak: ['Düsseldorf'] },
+  'Hannover 96': { strong: ['Hannover 96'], weak: ['Hannover'] },
+  '1. FC Nürnberg': { strong: ['1. FC Nürnberg', 'FCN', 'Der Club'], weak: ['Nürnberg'] },
+  'Karlsruher SC': { strong: ['Karlsruher SC', 'KSC'], weak: ['Karlsruhe'] },
+  '1. FC Kaiserslautern': { strong: ['1. FC Kaiserslautern', 'FCK', 'Roten Teufel'], weak: ['Kaiserslautern'] },
+  'Darmstadt 98': { strong: ['SV Darmstadt', 'Darmstadt 98', 'Lilien'], weak: ['Darmstadt'] },
+  'Real Madrid': { strong: ['Real Madrid'], weak: [] },
+  'Barcelona': { strong: ['FC Barcelona', 'Barça', 'Barca'], weak: ['Barcelona'] },
+  'Manchester United': { strong: ['Manchester United', 'Man United', 'ManUnited'], weak: [] },
+  'Manchester City': { strong: ['Manchester City', 'Man City', 'ManCity'], weak: [] },
+  'Liverpool': { strong: ['FC Liverpool', 'Liverpool FC'], weak: ['Liverpool'] },
+  'Juventus': { strong: ['Juventus', 'Juve'], weak: ['Turin'] },
+  'Paris Saint-Germain': { strong: ['Paris Saint-Germain', 'PSG'], weak: ['Paris'] },
+  'Germany': { strong: ['Nationalmannschaft', 'DFB-Team', 'DFB-Elf', 'Nagelsmann', 'Nationalelf', 'DFB-Auswahl'], weak: ['Deutschland'] },
+};
+const SPORT_CONTEXT = /Bundesliga|Champions League|Europa League|Conference League|Pokal|Trainer|Spieltag|Spiel\b|Tor\b|Tore\b|Torschütze|Liga|Transfer|Kader|Stadion|Fans\b|Sieg|Niederlage|Remis|Unentschieden|Elfmeter|Saison|Mannschaft|Fußball|Abstieg|Tabelle|Stürmer|Verteidiger|Torwart|Keeper|Kicker|Länderspiel|Nations League|WM-|EM-|Premier League|LaLiga|Serie A|Ligue 1/i;
+const reEscape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const wordRe = w => new RegExp(`(^|[^\\p{L}\\d])${reEscape(w)}($|[^\\p{L}\\d])`, 'u');
+export function clubTerms(team) {
+  const en = team.en || team.full || team.name || '';
+  const known = CLUB_NAMES[en] || CLUB_NAMES[team.name] || null;
+  const strong = known ? known.strong : [en];
+  const weak = known ? known.weak : [team.name].filter(n => n && n !== en);
+  return { strong, weak, query: strong[0] };
+}
+export function clubMatcher(team) {
+  const { strong, weak } = clubTerms(team);
+  const S = strong.map(wordRe), W = weak.map(wordRe);
+  return it => {
+    const text = `${it.title} ${it.teaser || ''}`;
+    if (S.some(r => r.test(text))) return true;
+    return W.some(r => r.test(text)) && (it.cat === 'sport' || it.source === 'kicker' || SPORT_CONTEXT.test(text));
+  };
+}
+export async function clubNews(team) {
+  const m = clubMatcher(team);
+  const { strong } = clubTerms(team);
+  const lists = await Promise.all([
+    loadCategory('sport').catch(() => []),
+    loadCategory('top').catch(() => []),
+    ...strong.slice(0, 2).map(q => searchNews(q, { days: 10 }).catch(() => [])),
+  ]);
+  return merge(lists).filter(m);
+}
+
 async function goalGetters(oldb) {
   const now = new Date();
   const season = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
@@ -311,7 +406,8 @@ export function renderSports(root) {
       if (state.favLeagues.includes(key)) state.favLeagues = state.favLeagues.filter(x => x !== key);
       else state.favLeagues.push(key);
       save(); paintHead();
-      toast(state.favLeagues.includes(key) ? 'Liga erscheint jetzt auf deinem Dashboard' : 'Liga aus Favoriten entfernt');
+      window.dispatchEvent(new Event('pulse:favs'));
+      toast(state.favLeagues.includes(key) ? (key === 'national/dfb' ? 'DFB-Team erscheint jetzt oben auf der Startseite' : 'Liga erscheint jetzt auf deinem Dashboard') : 'Aus Favoriten entfernt');
     }
     if (e.target.closest('[data-reload]')) { invalidate('sb:'); invalidate('st:'); paint(); }
   });
@@ -413,7 +509,7 @@ export function openTeam(key, id) {
           <div class="nm"><b>${esc(p.name)}</b><span>${[p.jersey && '#' + p.jersey, p.age && p.age + ' J.', p.nat].filter(Boolean).map(esc).join(' · ')}</span></div>${icon('right', 'sm')}</div>`).join('')}</div>`).join('')
         : `<div class="card">${empty('Kader nicht verfügbar.', '👥')}</div>`}
         <div class="section-title"><h2>News</h2></div><div class="card list-card" data-news>${skeletonList(3)}</div>`;
-      searchNews(info?.full || info?.name || '', { days: 7 }).then(items => {
+      clubNews({ en: info?.full, full: info?.full, name: info?.name }).then(items => {
         const el = body.querySelector('[data-news]');
         if (el) el.innerHTML = items.slice(0, 8).map(i => artRow(i)).join('') || empty('Keine News.');
       }).catch(() => {});
@@ -476,6 +572,7 @@ export function setMyTeam(t) {
   state.favTeams = [t, ...state.favTeams.filter(x => !(x.key === t.key && String(x.id) === String(t.id)))];
   state.profile.team = t.full || t.name;
   save();
+  window.dispatchEvent(new Event('pulse:favs'));
 }
 export function openTeamPicker(onDone) {
   const pickable = LEAGUES.filter(l => !l.national && !l.racing && !l.noTeams && l.key !== 'soccer/ger.dfb_pokal');
