@@ -1,14 +1,15 @@
 // Dashboard „Heute“: Eilmeldungen, Wetter, Briefing, Themen-Widgets, Watchlist, Sport, Live
 import { state, save, invalidate } from './store.js';
-import { esc, icon, timeAgo, skeletonList, empty, errorBox, initials } from './ui.js';
-import { loadCategory, loadTopic, topicMatcher, artRow, artHero, register, CATS } from './news.js';
+import { esc, icon, timeAgo, skeletonList, empty, errorBox, initials, dayLabel } from './ui.js';
+import { loadCategory, loadTopic, topicMatcher, artRow, artHero, register, CATS, searchNews } from './news.js';
 import { quotes, quoteTile } from './markets.js';
-import { dashboardGames, matchRow, leagueBy } from './sports.js';
+import { dashboardGames, matchRow, leagueBy, myTeam, schedule, teamPosition, openTeamPicker } from './sports.js';
 import { weather, wmo, CHANNELS, channelCard } from './extras.js';
 import { openTopicEditor, openDashboardEditor } from './settings.js';
 
 export const WIDGETS = {
   breaking: { label: 'Eilmeldungen', icon: '🚨' },
+  myteam: { label: 'Mein Verein', icon: '❤️' },
   weather: { label: 'Wetter', icon: '🌤️' },
   briefing: { label: 'Das Wichtigste', icon: '⚡' },
   topics: { label: 'Meine Themen', icon: '⭐' },
@@ -81,6 +82,36 @@ export function renderDashboard(root, app) {
   };
   const W = type => root.querySelector(`[data-w="${type}"]`);
 
+  async function wMyTeam() {
+    const el = W('myteam');
+    if (!el) return;
+    const t = myTeam();
+    if (!t) {
+      el.innerHTML = `<div class="card-head"><h3>❤️ Mein Verein</h3></div>
+        <div class="empty"><div class="e">⚽</div>Wähle deinen Lieblingsverein – dann siehst du hier seine Spiele, den Tabellenplatz und alle News.<br>
+        <button class="btn primary sm" data-pick-team style="margin-top:12px">Verein wählen</button></div>`;
+      return;
+    }
+    const L = leagueBy(t.key);
+    el.innerHTML = `<div class="card-head" data-team="${esc(t.key)}|${esc(t.id)}" style="cursor:pointer">
+        ${t.logo ? `<img src="${esc(t.logo)}" alt="" style="width:36px;height:36px;object-fit:contain">` : '<span style="font-size:24px">⚽</span>'}
+        <h3>${esc(t.full || t.name)}<br><small class="muted" style="font-weight:500;font-size:12.5px" data-pos>${esc(L?.name || '')}</small></h3>
+        <button class="icon-btn" data-pick-team style="width:32px;height:32px;box-shadow:none" aria-label="Verein ändern">${icon('edit', 'sm')}</button></div>
+      <div data-games>${skeletonList(2, false)}</div>
+      <div class="day-h">News</div><div class="list-card" data-tnews>${skeletonList(3, false)}</div>`;
+    const [sched, pos] = await Promise.all([schedule(t.key, t.id).catch(() => []), teamPosition(t.key, t.id)]);
+    if (pos) el.querySelector('[data-pos]').textContent = `${L?.name || ''} · Platz ${pos.rank}${pos.points != null ? ` · ${pos.points} Punkte` : ''}${pos.group ? ` · ${pos.group}` : ''}`;
+    const now = Date.now();
+    const live = sched.find(m => m.state === 'in');
+    const next = sched.find(m => m.state === 'pre' && m.date > now - 3 * 3600e3);
+    const last = sched.filter(m => m.state === 'post').pop();
+    const part = (lbl, m) => m ? `<div class="day-h" style="padding-bottom:0">${lbl} · ${esc(dayLabel(m.date))}</div>${matchRow(m)}` : '';
+    el.querySelector('[data-games]').innerHTML = (part('Live', live) + part('Nächstes Spiel', next) + part('Letztes Ergebnis', last)) || empty('Keine Spiele gefunden.', '📅');
+    try {
+      const items = await searchNews(t.full || t.name, { days: 7 });
+      el.querySelector('[data-tnews]').innerHTML = items.slice(0, 4).map(i => artRow(i, { compact: true })).join('') || empty('Gerade keine News zu deinem Verein.', '📰');
+    } catch { el.querySelector('[data-tnews]').innerHTML = empty('News gerade nicht erreichbar.', '📰'); }
+  }
   async function wWeather() {
     const el = W('weather');
     if (!el) return;
@@ -185,7 +216,7 @@ export function renderDashboard(root, app) {
     running = true;
     root.querySelector('[data-reload]')?.classList.add('spin');
     if (force) invalidate('');
-    const jobs = [wWeather(), wMarkets(), wSports()];
+    const jobs = [wMyTeam(), wWeather(), wMarkets(), wSports()];
     wLive();
     // Top-Nachrichten immer laden (für Eilmeldungen), auch wenn Briefing ausgeblendet ist
     jobs.push(W('briefing') ? wBriefing() : loadCategory('top').then(i => collected.set('_top', i)).catch(() => {}));
@@ -202,6 +233,7 @@ export function renderDashboard(root, app) {
   root.addEventListener('click', e => {
     const t = e.target;
     if (t.closest('[data-reload]')) return refresh(true);
+    if (t.closest('[data-pick-team]')) { e.stopPropagation(); return openTeamPicker(() => wMyTeam()); }
     if (t.closest('[data-edit]')) return openDashboardEditor(() => rebuild());
     if (t.closest('[data-add-topic]')) return openTopicEditor(null, () => rebuild());
     const et = t.closest('[data-edit-topic]');

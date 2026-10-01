@@ -126,7 +126,7 @@ async function roster(key, id) {
     }));
   }, { persist: false });
 }
-async function schedule(key, id) {
+export async function schedule(key, id) {
   return cached(`sc:${key}:${id}`, 5 * 60e3, async () => {
     const d = await fetchJSON(`${API}${key}/teams/${id}/schedule`);
     return (d.events || []).map(e => parseEvent(e, key)).sort((a, b) => a.date - b.date);
@@ -468,4 +468,54 @@ export async function dashboardGames() {
   if (all.length) return all.sort((a, b) => rank(a) - rank(b) || Math.abs(a.date - now) - Math.abs(b.date - now));
   // Nichts in den nächsten Stunden: die nächsten angesetzten Spiele zeigen
   return lists.flat().filter(m => m && m.state === 'pre' && m.date > now).sort((a, b) => a.date - b.date).slice(0, 6).map(m => ({ ...m, upcoming: true }));
+}
+
+// ---------- Lieblingsverein ----------
+export const myTeam = () => state.favTeams[0] || null;
+export function setMyTeam(t) {
+  state.favTeams = [t, ...state.favTeams.filter(x => !(x.key === t.key && String(x.id) === String(t.id)))];
+  state.profile.team = t.full || t.name;
+  save();
+}
+export function openTeamPicker(onDone) {
+  const pickable = LEAGUES.filter(l => !l.national && !l.racing && !l.noTeams && l.key !== 'soccer/ger.dfb_pokal');
+  let key = myTeam()?.key || 'soccer/ger.1';
+  openSheet({
+    title: 'Lieblingsverein wählen',
+    onClose: onDone,
+    render: (body, sh) => {
+      const paint = async () => {
+        body.innerHTML = `<p class="muted" style="margin-top:0">Spiele, Tabellenplatz und News deines Vereins erscheinen dann ganz oben auf der Startseite.</p>
+          <div class="chips">${pickable.map(l => `<button class="chip ${l.key === key ? 'active' : ''}" data-pl="${l.key}">${l.flag} ${esc(l.name)}</button>`).join('')}</div>
+          <div data-grid><div class="card">${skeletonList(4, false)}</div></div>`;
+        try {
+          const list = await teams(key);
+          const cur = myTeam();
+          body.querySelector('[data-grid]').innerHTML = `<div class="team-grid">${list.map(t => `<button class="team-card" data-pick="${esc(t.id)}" style="${cur && cur.key === key && String(cur.id) === String(t.id) ? 'outline:2px solid var(--accent)' : ''}">${t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy">` : ''}${esc(t.name)}</button>`).join('')}</div>`;
+          body.querySelector('[data-grid]').onclick = e => {
+            const b = e.target.closest('[data-pick]');
+            if (!b) return;
+            const t = list.find(x => String(x.id) === b.dataset.pick);
+            setMyTeam({ key, id: String(t.id), name: t.name, full: t.full, logo: t.logo });
+            toast(`${t.full || t.name} ist jetzt dein Lieblingsverein`);
+            sh.close();
+          };
+        } catch (err) { body.querySelector('[data-grid]').innerHTML = `<div class="card">${errorBox(err)}</div>`; }
+      };
+      body.addEventListener('click', e => { const c = e.target.closest('[data-pl]'); if (c) { key = c.dataset.pl; paint(); } });
+      paint();
+    },
+  });
+}
+// Tabellenplatz eines Teams
+export async function teamPosition(key, id) {
+  try {
+    const groups = await standings(key);
+    for (const g of groups) {
+      const rows = g.entries.slice().sort((a, b) => (+a.raw.rank || 99) - (+b.raw.rank || 99));
+      const i = rows.findIndex(e => String(e.id) === String(id));
+      if (i >= 0) return { rank: +rows[i].raw.rank || i + 1, points: rows[i].stats.points, played: rows[i].stats.gamesPlayed, group: groups.length > 1 ? g.name : '' };
+    }
+  } catch { /* keine Tabelle */ }
+  return null;
 }

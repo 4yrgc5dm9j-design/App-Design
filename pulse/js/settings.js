@@ -2,8 +2,9 @@
 import { state, save, uid, resetAll, exportState, importState } from './store.js';
 import { esc, icon, openSheet, toast, empty, initials, $$ } from './ui.js';
 import { CATS, artRow, openSources } from './news.js';
-import { LEAGUES } from './sports.js';
+import { LEAGUES, openTeamPicker } from './sports.js';
 import { geocode, openLive, openResearch } from './extras.js';
+import { openAssistant, openAiSettings } from './assistant.js';
 
 export const TOPIC_PRESETS = [
   { name: 'Bundesregierung', keywords: ['Bundesregierung', 'Kanzler', 'Bundestag', 'Koalition'], category: 'politik', icon: '🏛️', color: '#7c5cff' },
@@ -166,20 +167,18 @@ export function openProfile(onDone) {
         <label class="field"><span>Name</span><input class="input" name="name" value="${esc(p.name)}" placeholder="Dein Name" autocomplete="name"></label>
         <div class="field"><span>Wohnort (für Wetter & lokale Infos)</span><div data-city></div></div>
         <label class="field"><span>Geburtstag</span><input class="input" type="date" name="birthday" value="${esc(p.birthday)}"></label>
-        <label class="field"><span>Lieblingsverein</span><input class="input" name="team" value="${esc(p.team)}" placeholder="z. B. FC Bayern München"></label>
+        <div class="field"><span>Lieblingsverein</span><button class="btn block" data-pick-team type="button" style="justify-content:flex-start">⚽ <span data-team-name>${esc(p.team || 'Verein wählen')}</span></button></div>
         <label class="field"><span>Über mich / Interessen</span><textarea class="input" name="about" rows="3" placeholder="z. B. Beruf, Hobbys – hilft dir, passende Themen anzulegen">${esc(p.about)}</textarea></label>
         <button class="btn primary block" data-save>Speichern</button>
         <p class="disclaimer" style="text-align:center">🔒 Deine Daten bleiben ausschließlich auf diesem Gerät gespeichert.</p>`;
       let city = null;
       cityPicker(body.querySelector('[data-city]'), r => { city = r; });
+      body.querySelector('[data-pick-team]').onclick = () => openTeamPicker(() => { body.querySelector('[data-team-name]').textContent = state.profile.team || 'Verein wählen'; });
       body.querySelector('[data-save]').onclick = () => {
         const f = n => body.querySelector(`[name="${n}"]`).value.trim();
-        Object.assign(p, { name: f('name'), birthday: f('birthday'), team: f('team'), about: f('about') });
+        Object.assign(p, { name: f('name'), birthday: f('birthday'), about: f('about') });
         if (city) Object.assign(p, { city: city.name, lat: city.lat, lon: city.lon });
-        if (p.team && !state.topics.some(t => t.name === p.team)) {
-          state.topics.push({ id: uid(), name: p.team, keywords: [p.team], category: 'sport', icon: '⚽', color: '#22c55e', alert: true });
-          toast('Profil gespeichert · Thema für deinen Verein angelegt');
-        } else toast('Profil gespeichert');
+        toast('Profil gespeichert');
         save();
         history.back();
       };
@@ -203,6 +202,8 @@ export function openSettings(onDone) {
           <div class="set-row"><div class="tx"><b>Benachrichtigungen</b><span>Eilmeldungen, solange newszentrale geöffnet ist</span></div>
             <label class="switch"><input type="checkbox" data-notify ${s.notify ? 'checked' : ''}><i></i></label></div>
           <div class="set-row" style="cursor:pointer" data-sources><div class="tx"><b>Nachrichtenquellen</b><span>Redaktionen & Agenturen auswählen</span></div>${icon('right')}</div>
+          <div class="set-row" style="cursor:pointer" data-ai><div class="tx"><b>KI-Assistent</b><span>Kostenlos über Claude oder mit eigenem API-Schlüssel</span></div>${icon('right')}</div>
+          <div class="set-row" style="cursor:pointer" data-myteam><div class="tx"><b>Lieblingsverein</b><span>${esc(state.profile.team || 'Noch nicht gewählt')}</span></div>${icon('right')}</div>
         </div>
         <div class="section-title"><h2>Verbindung</h2></div>
         <div class="card card-pad">
@@ -233,6 +234,8 @@ export function openSettings(onDone) {
         s.notify = e.target.checked; save();
       };
       body.querySelector('[data-sources]').onclick = () => openSources();
+      body.querySelector('[data-ai]').onclick = () => openAiSettings();
+      body.querySelector('[data-myteam]').onclick = () => openTeamPicker(() => { body.querySelector('[data-myteam] .tx span').textContent = state.profile.team || 'Noch nicht gewählt'; });
       body.querySelector('[data-export]').onclick = () => {
         const blob = new Blob([exportState()], { type: 'application/json' });
         const a = document.createElement('a');
@@ -272,6 +275,7 @@ export function renderMore(root, app) {
   const paint = () => {
     const p = state.profile;
     const tiles = [
+      ['ai', 'KI-Assistent', 'Frag mich alles', 'zap', 'linear-gradient(135deg,#7c5cff,#00c2ff)'],
       ['live', 'Live-TV', 'Nachrichtensender', 'tv', 'linear-gradient(135deg,#ff2d55,#ff6a3d)'],
       ['research', 'Recherche', 'Wikipedia + News', 'book', 'linear-gradient(135deg,#7c5cff,#4f7bff)'],
       ['saved', 'Gespeichert', `${state.saved.length} Artikel`, 'bookmark', 'linear-gradient(135deg,#f59e0b,#f97316)'],
@@ -296,6 +300,7 @@ export function renderMore(root, app) {
     if (!m) return;
     ({
       profile: () => openProfile(() => { paint(); app.dashboard()?.rebuild(); }),
+      ai: () => openAssistant(),
       live: openLive,
       research: () => openResearch(),
       saved: openSaved,

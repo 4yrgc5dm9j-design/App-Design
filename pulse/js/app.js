@@ -7,6 +7,7 @@ import { renderSports, openMatch, openTeam, openPlayer } from './sports.js';
 import { renderDashboard } from './dashboard.js';
 import { renderMore, runOnboarding, applyTheme, openProfile } from './settings.js';
 import { openLive, openResearch, playChannel } from './extras.js';
+import { openAssistant } from './assistant.js';
 
 const TABS = [
   { id: 'heute', label: 'Heute', icon: 'home', render: renderDashboard },
@@ -97,6 +98,11 @@ document.addEventListener('visibilitychange', tick);
 function start() {
   applyTheme();
   tabbar();
+  // KI-Assistent immer erreichbar
+  const fab = document.createElement('button');
+  fab.className = 'fab'; fab.setAttribute('aria-label', 'KI-Assistent fragen'); fab.textContent = '✨';
+  fab.onclick = () => openAssistant();
+  document.body.appendChild(fab);
   const hashTab = location.hash.replace('#', '');
   go(hashTab || 'heute');
 }

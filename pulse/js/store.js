@@ -18,6 +18,7 @@ const DEFAULT = {
   sources: {},
   widgets: [
     { type: 'breaking', on: true },
+    { type: 'myteam', on: true },
     { type: 'weather', on: true },
     { type: 'briefing', on: true },
     { type: 'topics', on: true },
@@ -38,11 +39,14 @@ function load() {
     if (!raw) return clone(DEFAULT);
     const s = JSON.parse(raw);
     const base = clone(DEFAULT);
-    return {
+    const st = {
       ...base, ...s,
       profile: { ...base.profile, ...(s.profile || {}) },
       settings: { ...base.settings, ...(s.settings || {}) },
     };
+    // neue Startseiten-Bereiche für bestehende Nutzer ergänzen
+    if (Array.isArray(st.widgets) && !st.widgets.some(w => w.type === 'myteam')) st.widgets.splice(1, 0, { type: 'myteam', on: true });
+    return st;
   } catch {
     return clone(DEFAULT);
   }
