@@ -413,36 +413,52 @@ const slimEvent = e => ({ id: e.id, date: e.date, name: e.name, competitions: (e
   date: c.date, status: c.status, venue: c.venue ? { fullName: c.venue.fullName } : undefined,
   competitors: (c.competitors || []).map(x => ({ homeAway: x.homeAway, score: x.score, winner: x.winner, team: x.team && { id: x.team.id, displayName: x.team.displayName, shortDisplayName: x.team.shortDisplayName, logo: x.team.logo } })),
 })), status: e.status });
+const ESPN_WEB = 'https://site.web.api.espn.com/apis/site/v2/sports/';
 async function buildNational() {
   const ymd = d => d.toISOString().slice(0, 10).replace(/-/g, '');
-  const from = new Date(NOW - 183 * 864e5), to = new Date(NOW + 274 * 864e5);
-  const all = [];
-  await pool(NATIONAL_COMPS, 3, async c => {
-    // Monatsweise, damit kein Abruf zu groß wird
-    for (let m = new Date(from); m < to; m.setMonth(m.getMonth() + 1)) {
-      const end = new Date(m); end.setMonth(end.getMonth() + 1); end.setDate(end.getDate() - 1);
+  const old = await readOld('sports/national.json');
+  // Historie nur alle 6 Stunden komplett neu laden; dazwischen nur die Spiele rund um heute
+  const full = !old?.full || NOW - old.full > 6 * 3600e3;
+  const from = NOW - (full ? 183 : 3) * 864e5, to = NOW + (full ? 274 : 10) * 864e5;
+  const all = full ? [] : (old.events || []);
+  await pool(NATIONAL_COMPS, 2, async c => {
+    let cal;
+    try { cal = await get(`${ESPN_WEB}${c.key}/scoreboard`, { json: true }); }
+    catch (e) { console.log(`national ${c.key}: ${e.message}`); return; }
+    for (const e of cal.events || []) all.push({ ...slimEvent(e), _comp: c.key });
+    // Spieltage aus dem Kalender der Wettbewerbe
+    const days = new Set();
+    for (const entry of cal.leagues?.[0]?.calendar || []) {
+      if (typeof entry === 'string') { const t = Date.parse(entry); if (t >= from && t <= to) days.add(ymd(new Date(t))); continue; }
+      for (const x of entry.entries || []) {
+        for (let t = Date.parse(x.startDate); t <= Date.parse(x.endDate) && t <= to; t += 864e5) if (t >= from) days.add(ymd(new Date(t)));
+      }
+    }
+    for (const d of [...days].slice(0, 120)) {
       try {
-        const d = await get(`https://site.api.espn.com/apis/site/v2/sports/${c.key}/scoreboard?dates=${ymd(m)}-${ymd(end)}&limit=400`, { json: true, headers: { 'User-Agent': 'curl/8.5.0' } });
-        for (const e of d.events || []) all.push({ ...slimEvent(e), _comp: c.key });
-      } catch (e) { if (m.getTime() === from.getTime()) console.log(`national ${c.key}: ${e.message}`); }
+        const r = await get(`${ESPN_WEB}${c.key}/scoreboard?dates=${d}`, { json: true });
+        for (const e of r.events || []) all.push({ ...slimEvent(e), _comp: c.key });
+      } catch { /* einzelner Tag fehlgeschlagen */ }
+      await sleep(120);
     }
   });
-  const seen = new Set();
-  const events = all.filter(e => !seen.has(e.id) && seen.add(e.id)).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const byId = new Map();
+  for (const e of all) byId.set(e.id, e);
+  const events = [...byId.values()].filter(e => Date.parse(e.date) >= NOW - 183 * 864e5).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
   const ger = events.filter(e => e.competitions[0]?.competitors?.some(x => x.team?.displayName === 'Germany'));
-  console.log(`Länderspiele: ${events.length}, davon Deutschland: ${ger.length}`, ger.slice(-3).map(e => `${e.date.slice(0, 10)} ${e.name}`).join(' | '));
-  await write('sports/national.json', { updated: NOW, events });
+  console.log(`Länderspiele: ${events.length} (${full ? 'komplett' : 'aktuell'}), davon Deutschland: ${ger.length}`, ger.slice(-4).map(e => `${e.date.slice(0, 10)} ${e.name}`).join(' | '));
+  await write('sports/national.json', { updated: NOW, full: full ? NOW : old.full, events });
 }
 async function buildSports() {
   await buildNational().catch(e => console.log('national:', e.message));
   await pool(LEAGUES.filter(l => !l.national), 4, async l => {
     const f = l.key.replace('/', '_');
     for (const [kind, url] of [
-      ['scoreboard', `https://site.api.espn.com/apis/site/v2/sports/${l.key}/scoreboard`],
-      ['standings', `https://site.api.espn.com/apis/v2/sports/${l.key}/standings`],
-      ...(l.noTeams ? [] : [['teams', `https://site.api.espn.com/apis/site/v2/sports/${l.key}/teams`]]),
+      ['scoreboard', `${ESPN_WEB}${l.key}/scoreboard`],
+      ['standings', `https://site.web.api.espn.com/apis/v2/sports/${l.key}/standings`],
+      ...(l.noTeams ? [] : [['teams', `${ESPN_WEB}${l.key}/teams`]]),
     ]) {
-      try { await write(`sports/${f}-${kind}.json`, await get(url, { json: true, headers: { 'User-Agent': 'curl/8.5.0' } })); stats.sports++; }
+      try { await write(`sports/${f}-${kind}.json`, await get(url, { json: true })); stats.sports++; }
       catch (e) { console.log(`sport ${l.key} ${kind}: ${e.message}`); }
     }
   });
