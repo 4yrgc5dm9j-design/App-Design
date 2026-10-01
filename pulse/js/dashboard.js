@@ -3,7 +3,7 @@ import { state, save, invalidate } from './store.js';
 import { esc, icon, timeAgo, skeletonList, empty, errorBox, initials, dayLabel } from './ui.js';
 import { loadCategory, loadTopic, topicMatcher, artRow, artHero, register, CATS, searchNews } from './news.js';
 import { quotes, quoteTile } from './markets.js';
-import { dashboardGames, matchRow, leagueBy, myTeam, schedule, teamPosition, openTeamPicker, clubNews, nationalGames } from './sports.js';
+import { dashboardGames, matchRow, leagueBy, myTeam, schedule, teamPosition, openTeamPicker, clubNews, nationalGames, clubDisplayName } from './sports.js';
 import { weather, wmo, CHANNELS, channelCard } from './extras.js';
 import { openTopicEditor, openDashboardEditor } from './settings.js';
 
@@ -98,7 +98,7 @@ export function renderDashboard(root, app) {
     const L = leagueBy(t.key);
     el.innerHTML = `<div class="card-head" data-team="${esc(t.key)}|${esc(t.id)}" style="cursor:pointer">
         ${t.logo ? `<img src="${esc(t.logo)}" alt="" style="width:36px;height:36px;object-fit:contain">` : '<span style="font-size:24px">⚽</span>'}
-        <h3>${esc(t.full || t.name)}<br><small class="muted" style="font-weight:500;font-size:12.5px" data-pos>${esc(L?.name || '')}</small></h3>
+        <h3>${esc(clubDisplayName({ en: t.full, name: t.name }))}<br><small class="muted" style="font-weight:500;font-size:12.5px" data-pos>${esc(L?.name || '')}</small></h3>
         <button class="icon-btn" data-pick-team style="width:32px;height:32px;box-shadow:none" aria-label="Verein ändern">${icon('edit', 'sm')}</button></div>
       <div data-games>${skeletonList(2, false)}</div>
       <div class="day-h">News</div><div class="list-card" data-tnews>${skeletonList(3, false)}</div>`;

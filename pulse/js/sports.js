@@ -195,11 +195,15 @@ const CLUB_NAMES = {
   'Liverpool': { strong: ['FC Liverpool', 'Liverpool FC'], weak: ['Liverpool'] },
   'Juventus': { strong: ['Juventus', 'Juve'], weak: ['Turin'] },
   'Paris Saint-Germain': { strong: ['Paris Saint-Germain', 'PSG'], weak: ['Paris'] },
-  'Germany': { strong: ['Nationalmannschaft', 'DFB-Team', 'DFB-Elf', 'Nagelsmann', 'Nationalelf', 'DFB-Auswahl'], weak: ['Deutschland'] },
+  'Germany': { strong: ['DFB-Team', 'DFB-Elf', 'DFB-Auswahl', 'DFB-Kicker', 'DFB-Star', 'DFB-Stars', 'DFB-Spieler', 'Bundestrainer', 'deutsche Nationalmannschaft', 'Deutsche Nationalmannschaft', 'deutschen Nationalmannschaft', 'Deutschen Nationalmannschaft', 'deutsche Nationalelf', 'deutschen Nationalelf'], weak: ['Deutschland'] },
 };
 const SPORT_CONTEXT = /Bundesliga|Champions League|Europa League|Conference League|Pokal|Trainer|Spieltag|Spiel\b|Tor\b|Tore\b|Torschütze|Liga|Transfer|Kader|Stadion|Fans\b|Sieg|Niederlage|Remis|Unentschieden|Elfmeter|Saison|Mannschaft|Fußball|Abstieg|Tabelle|Stürmer|Verteidiger|Torwart|Keeper|Kicker|Länderspiel|Nations League|WM-|EM-|Premier League|LaLiga|Serie A|Ligue 1/i;
 const reEscape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const wordRe = w => new RegExp(`(^|[^\\p{L}\\d])${reEscape(w)}($|[^\\p{L}\\d])`, 'u');
+export function clubDisplayName(team) {
+  const k = CLUB_NAMES[team.en || team.full] || CLUB_NAMES[team.name];
+  return k ? k.strong[0] : (team.full || team.name);
+}
 export function clubTerms(team) {
   const en = team.en || team.full || team.name || '';
   const known = CLUB_NAMES[en] || CLUB_NAMES[team.name] || null;
