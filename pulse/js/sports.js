@@ -180,7 +180,7 @@ export function renderSports(root) {
   async function paintGames() {
     body.innerHTML = `<div class="card">${skeletonList(6, false)}</div>`;
     try {
-      let list = await scoreboard(key, week);
+      let list = await scoreboard(key, week).catch(e => { if (week === 0) return []; throw e; });
       let nextNote = '';
       if (!list.length && week === 0) {
         // Pause (z. B. Länderspiele): nächsten Spieltag automatisch anzeigen
