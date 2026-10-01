@@ -23,7 +23,7 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p shots
-          sleep 90
+          sleep 5
           node scripts/check-app.mjs "https://4yrgc5dm9j-design.github.io/App-Design/pulse/"
       - name: Aktueller Stand aus diesem Commit prüfen
         run: |

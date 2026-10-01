@@ -21,9 +21,11 @@ console.log('=== HTML ===\n' + (await page.evaluate(() => document.documentEleme
 console.log('=== HEUTE ===\n' + await text('.view.active'));
 await page.screenshot({ path: 'shots/1-heute.png' });
 for (const tab of ['boerse', 'sport', 'news']) {
-  await page.click(`#tabbar [data-tab="${tab}"]`, { timeout: 5000 });
+  await page.evaluate(t => document.querySelector(`#tabbar [data-tab="${t}"]`).click(), tab);
   await page.waitForTimeout(8000);
   console.log(`=== ${tab.toUpperCase()} ===\n` + await text('.view.active'));
+  if (tab === 'boerse') { await page.evaluate(() => document.querySelector('.view.active [data-stock]')?.click()); await page.waitForTimeout(6000); console.log('=== AKTIE ===\n' + await text('.sheet.open .sh-body')); await page.evaluate(() => history.back()); await page.waitForTimeout(800); }
+  if (tab === 'sport') { await page.evaluate(() => document.querySelector('[data-mode="table"]')?.click()); await page.waitForTimeout(5000); console.log('=== TABELLE ===\n' + await text('.view.active [data-body]')); }
   await page.screenshot({ path: `shots/${tab}.png` });
 }
 } catch (e) { console.log('ABBRUCH: ' + e.message.split('\n').slice(0, 8).join(' | ')); }
