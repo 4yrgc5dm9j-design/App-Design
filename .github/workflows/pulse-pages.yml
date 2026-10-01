@@ -1,0 +1,40 @@
+name: Pulse auf GitHub Pages veröffentlichen
+
+on:
+  push:
+    branches: [claude/pulse-news-app]
+    paths: ['pulse/**', '.github/workflows/pulse-pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Seite vorbereiten
+        run: |
+          mkdir -p site
+          cp -r pulse site/pulse
+          # Startseite leitet direkt zur App weiter
+          printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=pulse/"><title>Pulse</title><a href="pulse/">Pulse öffnen</a>\n' > site/index.html
+          touch site/.nojekyll
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

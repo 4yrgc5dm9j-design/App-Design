@@ -19,12 +19,12 @@ jobs:
         run: |
           npm i --no-save playwright@1.56.1
           npx playwright install --with-deps chromium
-      - name: Veröffentlichte App (githack-Link) prüfen
+      - name: Veröffentlichte App (GitHub Pages) prüfen
         continue-on-error: true
         run: |
           mkdir -p shots
-          sleep 20
-          node scripts/check-app.mjs "https://raw.githack.com/${{ github.repository }}/${{ github.ref_name }}/pulse/index.html"
+          sleep 90
+          node scripts/check-app.mjs "https://4yrgc5dm9j-design.github.io/App-Design/pulse/"
       - name: Aktueller Stand aus diesem Commit prüfen
         run: |
           npx --yes http-server pulse -p 8080 -s &

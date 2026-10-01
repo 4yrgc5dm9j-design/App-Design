@@ -26,6 +26,6 @@ for (const tab of ['boerse', 'sport', 'news']) {
   console.log(`=== ${tab.toUpperCase()} ===\n` + await text('.view.active'));
   await page.screenshot({ path: `shots/${tab}.png` });
 }
-} catch (e) { console.log('ABBRUCH: ' + e.message.split('\n')[0]); }
+} catch (e) { console.log('ABBRUCH: ' + e.message.split('\n').slice(0, 8).join(' | ')); }
 console.log('=== LOG ===\n' + [...new Set(log)].join('\n'));
 await browser.close();
