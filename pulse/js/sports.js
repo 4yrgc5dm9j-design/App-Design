@@ -43,14 +43,21 @@ function parseEvent(ev, key) {
 }
 const ymd = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 export async function scoreboard(key, week = null) {
-  let url = `${API}${key}/scoreboard`;
   if (week != null) {
-    const s = new Date(); s.setDate(s.getDate() - 3 + week * 7);
-    const e = new Date(s); e.setDate(e.getDate() + 7);
-    url += `?dates=${ymd(s)}-${ymd(e)}`;
+    // ESPN lehnt Datumsbereiche ab – daher die 8 Tage einzeln abfragen
+    const start = new Date(); start.setDate(start.getDate() - 3 + week * 7);
+    const days = Array.from({ length: 8 }, (_, i) => { const d = new Date(start); d.setDate(d.getDate() + i); return ymd(d); });
+    const lists = await pool(days, 4, d => cached(`sb:${key}:${d}`, 30e3, async () => {
+      const r = await fetchJSON(`${API}${key}/scoreboard?dates=${d}`);
+      return (r.events || []).map(e => parseEvent(e, key));
+    }));
+    if (lists.every(l => l == null)) throw new Error('Spiele gerade nicht erreichbar');
+    const seen = new Set();
+    return lists.flat().filter(m => m && !seen.has(m.id) && seen.add(m.id)).sort((x, y) => x.date - y.date);
   }
+  const url = `${API}${key}/scoreboard`;
   return cached('sb:' + url, 30e3, async () => {
-    const d = await espn(url, key, !week ? 'scoreboard' : null);
+    const d = await espn(url, key, 'scoreboard');
     return (d.events || []).map(e => parseEvent(e, key)).sort((a, b) => a.date - b.date);
   });
 }
