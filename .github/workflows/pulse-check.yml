@@ -1,0 +1,36 @@
+name: Pulse-App im Browser prüfen
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/pulse-news-app]
+    paths: ['pulse/**', 'scripts/check-app.mjs', '.github/workflows/pulse-check.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright installieren
+        run: |
+          npm i --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Veröffentlichte App (githack-Link) prüfen
+        run: |
+          mkdir -p shots
+          sleep 60
+          node scripts/check-app.mjs "https://raw.githack.com/${{ github.repository }}/${{ github.ref_name }}/pulse/index.html"
+      - name: Aktueller Stand aus diesem Commit prüfen
+        run: |
+          npx --yes http-server pulse -p 8080 -s &
+          sleep 3
+          node scripts/check-app.mjs "http://localhost:8080/index.html"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: shots
