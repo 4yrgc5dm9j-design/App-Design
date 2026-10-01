@@ -47,7 +47,7 @@ export async function scoreboard(key, week = null) {
   if (week != null) {
     const s = new Date(); s.setDate(s.getDate() - 3 + week * 7);
     const e = new Date(s); e.setDate(e.getDate() + 7);
-    url += `?dates=${ymd(s)}-${ymd(e)}&limit=200`;
+    url += `?dates=${ymd(s)}-${ymd(e)}`;
   }
   return cached('sb:' + url, 30e3, async () => {
     const d = await espn(url, key, !week ? 'scoreboard' : null);
