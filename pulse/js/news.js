@@ -186,7 +186,7 @@ function liveSearchTasks(q, days) {
   ];
   if (hasProxy()) tasks.push(() => cached('gns:' + q + days, TTL(), async () => {
     const txt = await fetchText(gnSearchUrl(q + (days ? ` when:${days}d` : '')), { validate: isXml });
-    return parseFeed(txt, 'google', 'top');
+    return parseFeed(txt, 'google', 'top').map(i => ({ ...i, fromSearch: true }));
   }));
   return tasks;
 }
@@ -216,7 +216,7 @@ export async function loadTopic(topic) {
   const live = q ? liveSearchTasks(q, 3) : [];
   const lists = await pool([...tasks, ...live], 4, t => t());
   // Suchtreffer (Google News) sind schon relevant; alles andere wird per Stichwort gefiltert
-  return merge(lists.flat().filter(Boolean).filter(i => m(i) || (i.source === 'google' && q))).filter(allowed);
+  return merge(lists.flat().filter(Boolean).filter(i => m(i) || i.fromSearch)).filter(allowed);
 }
 
 // Eilmeldungen: markierte Meldungen + ganz neue Treffer in Themen mit Alarm
