@@ -25,7 +25,11 @@ for (const tab of ['boerse', 'sport', 'news']) {
   await page.waitForTimeout(8000);
   console.log(`=== ${tab.toUpperCase()} ===\n` + await text('.view.active'));
   if (tab === 'boerse') { await page.evaluate(() => document.querySelector('.view.active [data-stock]')?.click()); await page.waitForTimeout(6000); console.log('=== AKTIE ===\n' + await text('.sheet.open .sh-body')); await page.evaluate(() => history.back()); await page.waitForTimeout(800); }
-  if (tab === 'sport') { await page.evaluate(() => document.querySelector('[data-mode="table"]')?.click()); await page.waitForTimeout(5000); console.log('=== TABELLE ===\n' + await text('.view.active [data-body]')); }
+  if (tab === 'sport') {
+    await page.evaluate(() => document.querySelector('[data-mode="table"]')?.click()); await page.waitForTimeout(5000); console.log('=== TABELLE ===\n' + await text('.view.active [data-body]'));
+    await page.evaluate(() => document.querySelector('[data-league="national/dfb"]')?.click()); await page.waitForTimeout(6000); console.log('=== DFB-TEAM ===\n' + await text('.view.active [data-body]'));
+    await page.evaluate(() => document.querySelector('[data-league="national/all"]')?.click()); await page.waitForTimeout(4000); console.log('=== NATIONALTEAMS ===\n' + await text('.view.active [data-body]'));
+  }
   await page.screenshot({ path: `shots/${tab}.png` });
 }
 } catch (e) { console.log('ABBRUCH: ' + e.message.split('\n').slice(0, 8).join(' | ')); }

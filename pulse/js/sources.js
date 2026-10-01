@@ -76,6 +76,8 @@ export const LEAGUES = [
   { key: 'basketball/nba', name: 'NBA', flag: '🏀' },
   { key: 'football/nfl', name: 'NFL', flag: '🏈' },
   { key: 'hockey/nhl', name: 'NHL', flag: '🏒' },
+  { key: 'national/dfb', name: 'DFB-Team', flag: '🇩🇪', national: true, only: 'Germany', noTeams: true, tableKey: 'soccer/uefa.nations' },
+  { key: 'national/all', name: 'Nationalteams', flag: '🌍', national: true, noTeams: true, tableKey: 'soccer/uefa.nations' },
   { key: 'racing/f1', name: 'Formel 1', flag: '🏎️', racing: true, noTeams: true },
 ];
 
@@ -98,3 +100,32 @@ export const MARKET_UNIVERSE = [
   'EUNL.DE', 'SXR8.DE', 'EXS1.DE', 'VWRL.AS', 'IS3N.DE', 'EQQQ.DE',
 ];
 export const symFile = s => s.replace(/[^A-Za-z0-9.-]/g, '_');
+
+// Länderspiel-Wettbewerbe (ESPN-Schlüssel) für „DFB-Team“ und „Nationalteams“
+export const NATIONAL_COMPS = [
+  { key: 'soccer/uefa.nations', name: 'Nations League' },
+  { key: 'soccer/fifa.friendly', name: 'Freundschaftsspiel' },
+  { key: 'soccer/fifa.worldq.uefa', name: 'WM-Qualifikation' },
+  { key: 'soccer/uefa.euroq', name: 'EM-Qualifikation' },
+  { key: 'soccer/fifa.world', name: 'Weltmeisterschaft' },
+  { key: 'soccer/uefa.euro', name: 'Europameisterschaft' },
+];
+// Deutsche Ländernamen für die Anzeige
+export const NATION_DE = {
+  Germany: 'Deutschland', Austria: 'Österreich', Switzerland: 'Schweiz', France: 'Frankreich', Spain: 'Spanien', Italy: 'Italien',
+  England: 'England', Netherlands: 'Niederlande', Belgium: 'Belgien', Portugal: 'Portugal', Denmark: 'Dänemark', Sweden: 'Schweden',
+  Norway: 'Norwegen', Finland: 'Finnland', Iceland: 'Island', Poland: 'Polen', 'Czechia': 'Tschechien', 'Czech Republic': 'Tschechien',
+  Slovakia: 'Slowakei', Hungary: 'Ungarn', Croatia: 'Kroatien', Serbia: 'Serbien', Slovenia: 'Slowenien', Romania: 'Rumänien',
+  Bulgaria: 'Bulgarien', Greece: 'Griechenland', Turkey: 'Türkei', 'Türkiye': 'Türkei', Ukraine: 'Ukraine', Scotland: 'Schottland',
+  Wales: 'Wales', 'Northern Ireland': 'Nordirland', 'Republic of Ireland': 'Irland', Ireland: 'Irland', Albania: 'Albanien',
+  'Bosnia-Herzegovina': 'Bosnien-Herzegowina', 'Bosnia and Herzegovina': 'Bosnien-Herzegowina', Montenegro: 'Montenegro',
+  'North Macedonia': 'Nordmazedonien', Georgia: 'Georgien', Armenia: 'Armenien', Azerbaijan: 'Aserbaidschan', Kazakhstan: 'Kasachstan',
+  Israel: 'Israel', Cyprus: 'Zypern', Luxembourg: 'Luxemburg', Liechtenstein: 'Liechtenstein', Malta: 'Malta', Estonia: 'Estland',
+  Latvia: 'Lettland', Lithuania: 'Litauen', Belarus: 'Belarus', Moldova: 'Moldau', Kosovo: 'Kosovo', 'Faroe Islands': 'Färöer',
+  Gibraltar: 'Gibraltar', Andorra: 'Andorra', 'San Marino': 'San Marino', Russia: 'Russland', 'United States': 'USA', USA: 'USA',
+  Mexico: 'Mexiko', Canada: 'Kanada', Brazil: 'Brasilien', Argentina: 'Argentinien', Uruguay: 'Uruguay', Colombia: 'Kolumbien',
+  Chile: 'Chile', Peru: 'Peru', Ecuador: 'Ecuador', Paraguay: 'Paraguay', Japan: 'Japan', 'South Korea': 'Südkorea',
+  Australia: 'Australien', Morocco: 'Marokko', Egypt: 'Ägypten', Senegal: 'Senegal', Nigeria: 'Nigeria', Ghana: 'Ghana',
+  Cameroon: 'Kamerun', Tunisia: 'Tunesien', Algeria: 'Algerien', 'Ivory Coast': 'Elfenbeinküste', "Côte d'Ivoire": 'Elfenbeinküste',
+  'South Africa': 'Südafrika', 'Saudi Arabia': 'Saudi-Arabien', Iran: 'Iran', Qatar: 'Katar', China: 'China',
+};

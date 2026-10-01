@@ -4,7 +4,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
-import { CATS, SOURCES, LEAGUES, MARKET_UNIVERSE, symFile } from '../pulse/js/sources.js';
+import { CATS, SOURCES, LEAGUES, MARKET_UNIVERSE, NATIONAL_COMPS, symFile } from '../pulse/js/sources.js';
 
 const OUT = path.resolve(process.argv[2] || 'out');
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
@@ -408,8 +408,34 @@ async function buildMarkets() {
 }
 
 // ---------- Sport (Fallback, falls ESPN direkt nicht erreichbar ist) ----------
+// Länderspiele: Ergebnisse der letzten 6 und Termine der nächsten 9 Monate
+const slimEvent = e => ({ id: e.id, date: e.date, name: e.name, competitions: (e.competitions || []).slice(0, 1).map(c => ({
+  date: c.date, status: c.status, venue: c.venue ? { fullName: c.venue.fullName } : undefined,
+  competitors: (c.competitors || []).map(x => ({ homeAway: x.homeAway, score: x.score, winner: x.winner, team: x.team && { id: x.team.id, displayName: x.team.displayName, shortDisplayName: x.team.shortDisplayName, logo: x.team.logo } })),
+})), status: e.status });
+async function buildNational() {
+  const ymd = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+  const from = new Date(NOW - 183 * 864e5), to = new Date(NOW + 274 * 864e5);
+  const all = [];
+  await pool(NATIONAL_COMPS, 3, async c => {
+    // Monatsweise, damit kein Abruf zu groß wird
+    for (let m = new Date(from); m < to; m.setMonth(m.getMonth() + 1)) {
+      const end = new Date(m); end.setMonth(end.getMonth() + 1); end.setDate(end.getDate() - 1);
+      try {
+        const d = await get(`https://site.api.espn.com/apis/site/v2/sports/${c.key}/scoreboard?dates=${ymd(m)}-${ymd(end)}&limit=400`, { json: true, headers: { 'User-Agent': 'curl/8.5.0' } });
+        for (const e of d.events || []) all.push({ ...slimEvent(e), _comp: c.key });
+      } catch (e) { if (m.getTime() === from.getTime()) console.log(`national ${c.key}: ${e.message}`); }
+    }
+  });
+  const seen = new Set();
+  const events = all.filter(e => !seen.has(e.id) && seen.add(e.id)).sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  const ger = events.filter(e => e.competitions[0]?.competitors?.some(x => x.team?.displayName === 'Germany'));
+  console.log(`Länderspiele: ${events.length}, davon Deutschland: ${ger.length}`, ger.slice(-3).map(e => `${e.date.slice(0, 10)} ${e.name}`).join(' | '));
+  await write('sports/national.json', { updated: NOW, events });
+}
 async function buildSports() {
-  await pool(LEAGUES, 4, async l => {
+  await buildNational().catch(e => console.log('national:', e.message));
+  await pool(LEAGUES.filter(l => !l.national), 4, async l => {
     const f = l.key.replace('/', '_');
     for (const [kind, url] of [
       ['scoreboard', `https://site.api.espn.com/apis/site/v2/sports/${l.key}/scoreboard`],

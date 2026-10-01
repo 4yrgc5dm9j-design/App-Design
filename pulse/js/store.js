@@ -13,7 +13,7 @@ const DEFAULT = {
   profile: { name: '', city: 'Berlin', lat: 52.52, lon: 13.405, birthday: '', team: '', about: '' },
   topics: DEFAULT_TOPICS,
   watchlist: ['^GDAXI', '^GSPC', 'SAP.DE', 'AAPL', 'NVDA', 'BTC-EUR'],
-  favLeagues: ['soccer/ger.1', 'soccer/uefa.champions'],
+  favLeagues: ['soccer/ger.1', 'soccer/uefa.champions', 'national/dfb'],
   favTeams: [],
   sources: {},
   widgets: [

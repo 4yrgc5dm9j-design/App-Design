@@ -4,7 +4,7 @@ import { fetchJSON, pool, DATA } from './net.js';
 import { esc, safeUrl, icon, openSheet, toast, skeletonList, empty, errorBox, dayLabel, clock, $$ } from './ui.js';
 import { artRow, searchNews } from './news.js';
 
-import { LEAGUES } from './sources.js';
+import { LEAGUES, NATIONAL_COMPS, NATION_DE } from './sources.js';
 export { LEAGUES };
 export const leagueBy = k => LEAGUES.find(l => l.key === k);
 // site.web.api.espn.com erlaubt Browser-Abrufe (CORS); site.api.espn.com blockiert Browser
@@ -23,7 +23,8 @@ const scoreVal = s => (s && typeof s === 'object') ? (s.displayValue ?? s.value)
 function team(x) {
   const t = x?.team || {};
   return {
-    id: t.id, name: t.shortDisplayName || t.displayName || x?.athlete?.displayName || '?', full: t.displayName || '',
+    id: t.id, name: NATION_DE[t.displayName] || t.shortDisplayName || t.displayName || x?.athlete?.displayName || '?', full: NATION_DE[t.displayName] || t.displayName || '',
+    en: t.displayName || '',
     logo: safeUrl(t.logo || t.logos?.[0]?.href || ''), score: scoreVal(x?.score), winner: x?.winner,
   };
 }
@@ -42,7 +43,32 @@ function parseEvent(ev, key) {
   };
 }
 const ymd = d => d.toISOString().slice(0, 10).replace(/-/g, '');
+// Länderspiele: gesammelte Ergebnisse/Termine (Daten-Job) + Live-Stand der laufenden Wettbewerbe
+async function nationalEvents() {
+  return cached('nat:all', 60e3, async () => {
+    const [stored, ...live] = await Promise.all([
+      fetchJSON(`${DATA}sports/national.json`).catch(() => ({ events: [] })),
+      ...NATIONAL_COMPS.map(c => fetchJSON(`${API}${c.key}/scoreboard`).then(d => (d.events || []).map(e => ({ ...e, _comp: c.key }))).catch(() => [])),
+    ]);
+    const byId = new Map();
+    for (const e of [...(stored.events || []), ...live.flat()]) byId.set(e.id, e);
+    const compName = Object.fromEntries(NATIONAL_COMPS.map(c => [c.key, c.name]));
+    return [...byId.values()].map(e => ({ ...parseEvent(e, e._comp), comp: compName[e._comp] || '' })).sort((a, b) => a.date - b.date);
+  }, { persist: false });
+}
+export async function nationalGames(key) {
+  const L = leagueBy(key);
+  const all = await nationalEvents();
+  return L.only ? all.filter(m => m.home?.en === L.only || m.away?.en === L.only) : all;
+}
 export async function scoreboard(key, week = null) {
+  if (leagueBy(key)?.national) {
+    const list = await nationalGames(key);
+    if (week == null) return list;
+    const s = new Date(); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() - 3 + week * 7);
+    const e = new Date(s); e.setDate(e.getDate() + 8);
+    return list.filter(m => m.date >= s && m.date < e);
+  }
   if (week != null) {
     // ESPN lehnt Datumsbereiche ab – daher die 8 Tage einzeln abfragen
     const start = new Date(); start.setDate(start.getDate() - 3 + week * 7);
@@ -69,7 +95,7 @@ export async function standings(key) {
       name: g.name || '',
       entries: (g.standings?.entries || []).map(e => ({
         id: e.team?.id || e.athlete?.id,
-        name: e.team?.shortDisplayName || e.team?.displayName || e.athlete?.displayName || '?',
+        name: NATION_DE[e.team?.displayName] || e.team?.shortDisplayName || e.team?.displayName || e.athlete?.displayName || '?',
         logo: safeUrl(e.team?.logos?.[0]?.href || e.athlete?.flag?.href || ''),
         note: e.note, stats: Object.fromEntries((e.stats || []).map(s => [s.name || s.type, s.displayValue ?? s.value])),
         raw: Object.fromEntries((e.stats || []).map(s => [s.name || s.type, s.value])),
@@ -170,14 +196,34 @@ export function renderSports(root) {
     const L = leagueBy(key);
     root.querySelector('[data-leagues]').innerHTML = sortedLeagues().map(l => `<button class="chip ${l.key === key ? 'active' : ''}" data-league="${l.key}">${l.flag} ${esc(l.name)}${state.favLeagues.includes(l.key) ? ' <span class="star">★</span>' : ''}</button>`).join('');
     const modes = [['games', 'Spiele']];
-    if (!L.noTable) modes.push(['table', L.racing ? 'WM-Stand' : 'Tabelle']);
+    if (!L.noTable) modes.push(['table', L.racing ? 'WM-Stand' : L.national ? 'Nations League' : 'Tabelle']);
     if (!L.noTeams) modes.push(['teams', 'Teams']);
     if (L.oldb) modes.push(['scorers', 'Torjäger']);
     if (!modes.some(m => m[0] === mode)) mode = 'games';
     root.querySelector('[data-modes]').innerHTML = modes.map(([id, l]) => `<button class="${id === mode ? 'active' : ''}" data-mode="${id}">${l}</button>`).join('');
     root.querySelector('[data-fav]').classList.toggle('on', state.favLeagues.includes(key));
   }
+  async function paintNational() {
+    body.innerHTML = `<div class="card">${skeletonList(6, false)}</div>`;
+    try {
+      const list = await nationalGames(key);
+      if (mode !== 'games') return;
+      const now = Date.now();
+      const live = list.filter(m => m.state === 'in');
+      const next = list.filter(m => m.state === 'pre' && m.date > now - 3 * 3600e3).slice(0, 12);
+      const past = list.filter(m => m.state === 'post').slice(-12).reverse();
+      const row = m => `<div class="day-h" style="padding-bottom:0">${esc(dayLabel(m.date))}${m.comp ? ' · ' + esc(m.comp) : ''}</div>${matchRow(m)}`;
+      const sec = (title, items, e) => `<div class="section-title" style="margin-top:14px"><h2>${title}</h2></div>
+        <div class="card">${items.length ? items.map(row).join('') : empty(e, '📅')}</div>`;
+      body.innerHTML = (live.length ? sec('<span class="live-badge">LIVE</span> Jetzt', live, '') : '') +
+        sec('Nächste Spiele', next, 'Aktuell sind keine Spiele angesetzt.') +
+        sec('Letzte Ergebnisse', past, 'Noch keine Ergebnisse vorhanden.');
+      clearInterval(liveTimer);
+      if (live.length) liveTimer = setInterval(() => { if (!document.hidden && root.classList.contains('active') && mode === 'games') { invalidate('nat:'); paintNational(); } }, 30e3);
+    } catch (err) { body.innerHTML = `<div class="card">${errorBox(err)}</div>`; }
+  }
   async function paintGames() {
+    if (leagueBy(key).national) return paintNational();
     body.innerHTML = `<div class="card">${skeletonList(6, false)}</div>`;
     try {
       let list = await scoreboard(key, week).catch(e => { if (week === 0) return []; throw e; });
@@ -207,9 +253,9 @@ export function renderSports(root) {
     body.innerHTML = `<div class="card">${skeletonList(8, false)}</div>`;
     const L = leagueBy(key);
     try {
-      const groups = await standings(key);
+      const groups = await standings(L.tableKey || key);
       if (mode !== 'table') return;
-      const soccer = isSoccer(key);
+      const soccer = isSoccer(L.tableKey || key);
       const cols = soccer ? [['gamesPlayed', 'Sp'], ['wins', 'S'], ['ties', 'U'], ['losses', 'N'], ['pointDifferential', 'Diff'], ['points', 'Pkt']]
         : L.racing ? [['championshipPts', 'Pkt']]
         : key === 'hockey/nhl' ? [['gamesPlayed', 'Sp'], ['wins', 'S'], ['losses', 'N'], ['otLosses', 'OTN'], ['points', 'Pkt']]
@@ -223,7 +269,7 @@ export function renderSports(root) {
         else rows.sort((a, b) => (b.raw.winPercent || 0) - (a.raw.winPercent || 0));
         return `<div class="card" style="margin-bottom:12px;overflow-x:auto">${g.name && groups.length > 1 ? `<div class="day-h">${esc(g.name)}</div>` : ''}
           <table class="tbl"><thead><tr><th>#</th><th class="tn">${L.racing ? 'Fahrer' : 'Team'}</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>
-          ${rows.map((e, i) => `<tr class="${favTeam(key, e.id) ? 'fav' : ''}" ${L.racing ? '' : `data-team="${esc(key)}|${esc(e.id)}"`}>
+          ${rows.map((e, i) => `<tr class="${favTeam(key, e.id) ? 'fav' : ''}" ${L.racing ? '' : `data-team="${esc(L.tableKey || key)}|${esc(e.id)}"`}>
             <td>${e.note?.color ? `<span class="zone" style="background:${esc(e.note.color)}" title="${esc(e.note.description || '')}"></span> ` : ''}${i + 1}</td>
             <td class="tn"><div>${e.logo ? `<img src="${esc(e.logo)}" alt="" loading="lazy">` : ''}<span>${esc(e.name)}</span></div></td>
             ${cols.map(c => `<td>${esc(e.stats[c[0]] ?? (c[0] === 'championshipPts' ? e.stats.points : '') ?? '')}</td>`).join('')}</tr>`).join('')}
@@ -413,11 +459,11 @@ export function openPlayer(key, id) {
 export async function dashboardGames() {
   const keys = state.favLeagues.slice(0, 4);
   const extra = [...new Set(state.favTeams.map(t => t.key))].filter(k => !keys.includes(k)).slice(0, 2);
-  const lists = await pool([...keys, ...extra], 3, k => scoreboard(k));
+  const lists = await pool([...keys, ...extra], 3, k => scoreboard(k).then(l => l.map(m => ({ ...m, via: k }))));
   const now = Date.now();
   const all = lists.flat().filter(Boolean)
     .filter(m => m.state === 'in' || Math.abs(m.date - now) < 36 * 3600e3 || (m.state === 'post' && now - m.date < 60 * 3600e3))
-    .filter(m => keys.includes(m.key) || favTeam(m.key, m.home?.id) || favTeam(m.key, m.away?.id));
+    .filter(m => keys.includes(m.via) || favTeam(m.key, m.home?.id) || favTeam(m.key, m.away?.id));
   const rank = m => (m.state === 'in' ? 0 : (favTeam(m.key, m.home?.id) || favTeam(m.key, m.away?.id)) ? 1 : m.state === 'pre' ? 2 : 3);
   if (all.length) return all.sort((a, b) => rank(a) - rank(b) || Math.abs(a.date - now) - Math.abs(b.date - now));
   // Nichts in den nächsten Stunden: die nächsten angesetzten Spiele zeigen
